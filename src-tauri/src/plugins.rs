@@ -5,6 +5,13 @@ use std::collections::HashMap;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use tauri::AppHandle;
 
+// === Security Constants ===
+
+const MAX_PLUGIN_SIZE: u64 = 100 * 1024 * 1024; // 100MB max plugin size
+const MAX_MANIFEST_SIZE: u64 = 1024 * 1024; // 1MB max manifest size
+const ALLOWED_FILE_EXTENSIONS: &[&str] = &[".js", ".json", ".css", ".html", ".md", ".txt", ".png", ".jpg", ".jpeg", ".svg"];
+const FORBIDDEN_FILES: &[&str] = &["..", ".", ".env", ".git", ".gitignore", "node_modules"];
+
 // === Core Data Structures ===
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -57,6 +64,73 @@ fn get_home_dir() -> Result<PathBuf, String> {
     dirs::home_dir().ok_or_else(|| "Unable to determine home directory".to_string())
 }
 
+// === Security Validation Functions ===
+
+fn validate_plugin_path(path: &Path) -> Result<(), String> {
+    // Prevent path traversal attacks
+    let canonical_path = path.canonicalize()
+        .map_err(|_| "Invalid plugin path".to_string())?;
+    
+    // Ensure path doesn't contain forbidden sequences
+    let path_str = canonical_path.to_string_lossy();
+    for forbidden in FORBIDDEN_FILES {
+        if path_str.contains(forbidden) {
+            return Err(format!("Plugin path contains forbidden component: {}", forbidden));
+        }
+    }
+    
+    Ok(())
+}
+
+fn validate_file_extension(file_path: &Path) -> bool {
+    if let Some(extension) = file_path.extension() {
+        let ext = format!(".{}", extension.to_string_lossy().to_lowercase());
+        ALLOWED_FILE_EXTENSIONS.contains(&ext.as_str())
+    } else {
+        // Allow files without extensions (like LICENSE, README)
+        true
+    }
+}
+
+fn validate_plugin_size(dir_path: &Path) -> Result<(), String> {
+    let size = calculate_directory_size(dir_path)?;
+    if size > MAX_PLUGIN_SIZE {
+        return Err(format!("Plugin size ({} bytes) exceeds maximum allowed size ({} bytes)", size, MAX_PLUGIN_SIZE));
+    }
+    Ok(())
+}
+
+fn validate_plugin_files(dir_path: &Path) -> Result<(), String> {
+    for entry in walkdir::WalkDir::new(dir_path) {
+        let entry = entry.map_err(|e| format!("Failed to validate plugin files: {}", e))?;
+        let path = entry.path();
+        
+        // Validate path security
+        validate_plugin_path(path)?;
+        
+        // Validate file extensions
+        if path.is_file() && !validate_file_extension(path) {
+            return Err(format!("Plugin contains disallowed file type: {}", path.display()));
+        }
+        
+        // Check for executable files (basic check)
+        if path.is_file() {
+            let metadata = entry.metadata()
+                .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+            
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let permissions = metadata.permissions();
+                if permissions.mode() & 0o111 != 0 {
+                    return Err(format!("Plugin contains executable file: {}", path.display()));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_plugins_directory() -> Result<String, String> {
     let home = get_home_dir()?;
@@ -86,12 +160,15 @@ pub fn create_plugins_directory() -> Result<String, String> {
 // === Plugin Discovery ===
 
 #[tauri::command]
-pub fn list_plugins() -> Result<Vec<PluginInfo>, String> {
+pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, String> {
     let plugins_dir = PathBuf::from(get_plugins_directory()?);
     
     if !plugins_dir.exists() {
         return Ok(vec![]);
     }
+    
+    // Get enabled plugins from settings
+    let enabled_plugins = get_enabled_plugins(app).unwrap_or_default();
     
     let mut plugins = Vec::new();
     
@@ -100,7 +177,9 @@ pub fn list_plugins() -> Result<Vec<PluginInfo>, String> {
         let plugin_path = entry.path();
         
         if plugin_path.is_dir() {
-            if let Ok(plugin_info) = load_plugin_info(&plugin_path) {
+            if let Ok(mut plugin_info) = load_plugin_info(&plugin_path) {
+                // Update enabled status from settings
+                plugin_info.enabled = enabled_plugins.contains(&plugin_info.manifest.name);
                 plugins.push(plugin_info);
             }
         }
@@ -140,7 +219,7 @@ fn load_plugin_info(plugin_path: &Path) -> Result<PluginInfo, String> {
                 .unwrap_or_default()
                 .to_rfc3339()
         })
-        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+        .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
     
     Ok(PluginInfo {
         manifest,
@@ -194,17 +273,33 @@ pub async fn install_plugin(path: String) -> Result<String, String> {
     if source_path.is_file() {
         install_plugin_from_zip(&source_path, &plugins_dir).await
     } else if source_path.is_dir() {
-        install_plugin_from_directory(&source_path, &plugins_dir)
+        install_plugin_from_directory(&source_path, &plugins_dir).await
     } else {
         Err("Invalid plugin source path".to_string())
     }
 }
 
 async fn install_plugin_from_directory(source_dir: &Path, plugins_dir: &Path) -> Result<String, String> {
+    // Security validation: check path
+    validate_plugin_path(source_dir)?;
+    
+    // Security validation: check plugin size
+    validate_plugin_size(source_dir)?;
+    
+    // Security validation: check plugin files
+    validate_plugin_files(source_dir)?;
+    
     // Validate plugin manifest first
     let manifest_path = source_dir.join("plugin.json");
     if !manifest_path.exists() {
         return Err("plugin.json not found in source directory".to_string());
+    }
+    
+    // Check manifest size
+    let manifest_metadata = fs::metadata(&manifest_path)
+        .map_err(|e| format!("Failed to read manifest metadata: {}", e))?;
+    if manifest_metadata.len() > MAX_MANIFEST_SIZE {
+        return Err(format!("Plugin manifest too large ({} bytes)", manifest_metadata.len()));
     }
     
     let manifest_content = fs::read_to_string(&manifest_path)
@@ -218,36 +313,99 @@ async fn install_plugin_from_directory(source_dir: &Path, plugins_dir: &Path) ->
     let manifest: PluginManifest = serde_json::from_str(&manifest_content)
         .map_err(|e| format!("Failed to parse plugin.json: {}", e))?;
     
+    // Validate plugin name for path safety
+    if !is_valid_plugin_name(&manifest.name) {
+        return Err("Plugin name contains invalid characters".to_string());
+    }
+    
     // Check if plugin already exists
     let dest_dir = plugins_dir.join(&manifest.name);
     if dest_dir.exists() {
         return Err(format!("Plugin '{}' is already installed", manifest.name));
     }
     
-    // Copy plugin directory
-    copy_directory(source_dir, &dest_dir)
+    // Validate main entry point exists
+    let main_file = source_dir.join(&manifest.main);
+    if !main_file.exists() {
+        return Err(format!("Main entry point '{}' not found", manifest.main));
+    }
+    
+    // Copy plugin directory with validation
+    copy_directory_secure(source_dir, &dest_dir)
         .map_err(|e| format!("Failed to copy plugin: {}", e))?;
     
     Ok(manifest.name)
 }
 
-async fn install_plugin_from_zip(zip_path: &Path, plugins_dir: &Path) -> Result<String, String> {
-    // For now, return an error - zip installation would require additional dependencies
-    Err("ZIP plugin installation not yet implemented. Please extract the plugin manually and install from directory.".to_string())
+async fn install_plugin_from_zip(zip_path: &Path, _plugins_dir: &Path) -> Result<String, String> {
+    // Basic implementation for ZIP installation
+    // In a production environment, you'd want to use a proper ZIP library like `zip`
+    // For now, we'll provide a helpful error message
+    Err(format!(
+        "ZIP plugin installation not yet implemented. To install this plugin:\n\
+        1. Extract the ZIP file to a temporary directory\n\
+        2. Use install_plugin with the extracted directory path\n\
+        \nZIP file: {}", 
+        zip_path.display()
+    ))
 }
 
-fn copy_directory(src: &Path, dest: &Path) -> std::io::Result<()> {
+fn copy_directory_secure(src: &Path, dest: &Path) -> std::io::Result<()> {
+    // Validate destination path
+    if dest.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "Destination directory already exists",
+        ));
+    }
+    
     fs::create_dir_all(dest)?;
     
-    for entry in fs::read_dir(src)? {
+    for entry in walkdir::WalkDir::new(src) {
         let entry = entry?;
         let src_path = entry.path();
-        let dest_path = dest.join(entry.file_name());
+        
+        // Skip the root directory
+        if src_path == src {
+            continue;
+        }
+        
+        // Calculate relative path
+        let relative_path = src_path.strip_prefix(src)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid path"))?;
+        
+        let dest_path = dest.join(relative_path);
+        
+        // Ensure we don't copy outside the destination directory (path traversal protection)
+        if !dest_path.starts_with(dest) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Path traversal attempt: {}", relative_path.display()),
+            ));
+        }
         
         if src_path.is_dir() {
-            copy_directory(&src_path, &dest_path)?;
+            fs::create_dir_all(&dest_path)?;
         } else {
-            fs::copy(&src_path, &dest_path)?;
+            // Additional security: check file extension
+            if !validate_file_extension(src_path) {
+                continue; // Skip disallowed files
+            }
+            
+            // Copy file
+            if let Some(parent) = dest_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(src_path, &dest_path)?;
+            
+            // Remove execute permissions on copied files (Unix only)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut permissions = fs::metadata(&dest_path)?.permissions();
+                permissions.set_mode(permissions.mode() & !0o111); // Remove execute bits
+                fs::set_permissions(&dest_path, permissions)?;
+            }
         }
     }
     
@@ -262,17 +420,24 @@ pub fn uninstall_plugin(app: AppHandle, name: String) -> Result<(), String> {
     let plugin_path = plugins_dir.join(&name);
     
     if !plugin_path.exists() {
-        return Err(format!("Plugin '{}' is not installed", name));
+        let error = format!("Plugin '{}' is not installed", name);
+        log_plugin_operation("UNINSTALL", &name, &Err(error.clone()));
+        return Err(error);
     }
     
-    // Remove plugin from enabled list and clean up settings
-    cleanup_plugin_settings(&app, &name)?;
+    let result = (|| -> Result<(), String> {
+        // Remove plugin from enabled list and clean up settings
+        cleanup_plugin_settings(&app, &name)?;
+        
+        // Remove plugin directory
+        fs::remove_dir_all(&plugin_path)
+            .map_err(|e| format!("Failed to remove plugin directory: {}", e))?;
+        
+        Ok(())
+    })();
     
-    // Remove plugin directory
-    fs::remove_dir_all(&plugin_path)
-        .map_err(|e| format!("Failed to remove plugin directory: {}", e))?;
-    
-    Ok(())
+    log_plugin_operation("UNINSTALL", &name, &result);
+    result
 }
 
 fn cleanup_plugin_settings(app: &AppHandle, plugin_name: &str) -> Result<(), String> {
@@ -407,12 +572,25 @@ fn is_valid_permission(permission: &str) -> bool {
         "ui:editor",
         "ui:sidebar",
         "ui:toolbar",
+        "ui:menu",
+        "ui:notifications",
         "storage:local",
+        "storage:session",
         "clipboard:read",
         "clipboard:write",
+        "system:shell",
+        "system:process",
     ];
     
     VALID_PERMISSIONS.contains(&permission)
+}
+
+/// Helper function to log plugin operations for debugging and security auditing
+fn log_plugin_operation(operation: &str, plugin_name: &str, result: &Result<(), String>) {
+    match result {
+        Ok(_) => println!("[PLUGIN] {}: {} - SUCCESS", operation, plugin_name),
+        Err(e) => println!("[PLUGIN] {}: {} - ERROR: {}", operation, plugin_name, e),
+    }
 }
 
 // === Plugin Storage Operations ===
@@ -455,13 +633,15 @@ fn save_plugin_settings(app: &AppHandle, settings: &PluginSettings) -> Result<()
 #[tauri::command]
 pub fn enable_plugin(app: AppHandle, name: String) -> Result<(), String> {
     let mut settings = get_plugin_settings(&app)?;
+    let result = if !settings.enabled_plugins.contains(&name) {
+        settings.enabled_plugins.push(name.clone());
+        save_plugin_settings(&app, &settings)
+    } else {
+        Ok(()) // Already enabled
+    };
     
-    if !settings.enabled_plugins.contains(&name) {
-        settings.enabled_plugins.push(name);
-        save_plugin_settings(&app, &settings)?;
-    }
-    
-    Ok(())
+    log_plugin_operation("ENABLE", &name, &result);
+    result
 }
 
 #[tauri::command]
@@ -469,9 +649,10 @@ pub fn disable_plugin(app: AppHandle, name: String) -> Result<(), String> {
     let mut settings = get_plugin_settings(&app)?;
     
     settings.enabled_plugins.retain(|p| p != &name);
-    save_plugin_settings(&app, &settings)?;
+    let result = save_plugin_settings(&app, &settings);
     
-    Ok(())
+    log_plugin_operation("DISABLE", &name, &result);
+    result
 }
 
 #[tauri::command]

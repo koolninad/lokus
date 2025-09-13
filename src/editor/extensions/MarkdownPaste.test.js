@@ -200,8 +200,8 @@ describe('MarkdownPaste Extension', () => {
 
       const result = handlePaste(mockView, mockClipboardEvent);
       
-      // Should return false when HTML is present
-      expect(result).toBe(false);
+      // Should now process markdown content even when HTML is present (this was the bug)
+      expect(result).toBe(true);
     });
 
     it('should not process plain text without markdown', () => {
@@ -242,6 +242,10 @@ describe('MarkdownPaste Extension', () => {
     it('should insert converted content into editor', () => {
       const markdownText = '**bold text**';
       const convertedHtml = '<p><strong>bold text</strong></p>';
+      
+      const mockClipboardData = {
+        getData: vi.fn()
+      };
       
       mockMarkdownIt.render.mockReturnValue(convertedHtml);
       mockClipboardData.getData.mockImplementation((type) => {

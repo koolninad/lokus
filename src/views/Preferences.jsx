@@ -5,8 +5,10 @@ import AccentPicker from "../components/AccentPicker.jsx";
 import { listActions, getActiveShortcuts, setShortcut, resetShortcuts } from "../core/shortcuts/registry.js";
 import { readConfig, updateConfig } from "../core/config/store.js";
 import { formatAccelerator } from "../core/shortcuts/registry.js";
-import { Search, Pencil, RotateCcw } from "lucide-react";
+import { Search, Pencil, RotateCcw, Package, ExternalLink } from "lucide-react";
 import liveEditorSettings from "../core/editor/live-settings.js";
+import PluginSettings from "./PluginSettings.jsx";
+import PluginMarketplace from "./PluginMarketplace.jsx";
 
 export default function Preferences() {
   const [themes, setThemes] = useState([]);
@@ -22,6 +24,7 @@ export default function Preferences() {
   const [headingAltEnabled, setHeadingAltEnabled] = useState(false);
   const [saveStatus, setSaveStatus] = useState(''); // For showing save feedback
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
+  const [pluginView, setPluginView] = useState('settings'); // 'settings' or 'marketplace'
   
   // Subscribe to live settings changes
   useEffect(() => {
@@ -213,6 +216,7 @@ export default function Preferences() {
             "Editor",
             "Markdown",
             "Shortcuts",
+            "Plugins",
           ].map((name) => (
             <button
               key={name}
@@ -581,6 +585,47 @@ export default function Preferences() {
                       );
                     })}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {section === "Plugins" && (
+            <div className="max-w-4xl">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex items-center gap-2 bg-app-panel border border-app-border rounded-lg p-1">
+                  <button
+                    onClick={() => setPluginView('settings')}
+                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                      pluginView === 'settings'
+                        ? 'bg-app-accent text-app-accent-fg'
+                        : 'text-app-muted hover:text-app-text hover:bg-app-bg'
+                    }`}
+                  >
+                    Installed Plugins
+                  </button>
+                  <button
+                    onClick={() => setPluginView('marketplace')}
+                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                      pluginView === 'marketplace'
+                        ? 'bg-app-accent text-app-accent-fg'
+                        : 'text-app-muted hover:text-app-text hover:bg-app-bg'
+                    }`}
+                  >
+                    Browse Marketplace
+                  </button>
+                </div>
+              </div>
+              
+              <div className="border border-app-border rounded-lg overflow-hidden">
+                {pluginView === 'settings' ? (
+                  <div className="h-96">
+                    <PluginSettings />
+                  </div>
+                ) : (
+                  <div className="h-96">
+                    <PluginMarketplace />
+                  </div>
+                )}
               </div>
             </div>
           )}

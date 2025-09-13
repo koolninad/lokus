@@ -4,6 +4,7 @@ import Workspace from "./views/Workspace";
 import Preferences from "./views/Preferences";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
+import { PluginProvider } from "./hooks/usePlugins.jsx";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
@@ -58,15 +59,17 @@ function App() {
     };
   }, []);
 
-  if (isPrefsWindow) {
-    return <Preferences />;
-  }
-
-  if (activePath) {
-    return <Workspace initialPath={activePath} />;
-  }
-
-  return <Launcher />;
+  return (
+    <PluginProvider>
+      {isPrefsWindow ? (
+        <Preferences />
+      ) : activePath ? (
+        <Workspace initialPath={activePath} />
+      ) : (
+        <Launcher />
+      )}
+    </PluginProvider>
+  );
 }
 
 export default App;
