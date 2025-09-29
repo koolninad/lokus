@@ -24,10 +24,10 @@ pub struct PKCEData {
 impl GmailAuth {
     pub fn new() -> Result<Self, GmailError> {
         let client_id = std::env::var("GOOGLE_CLIENT_ID")
-            .map_err(|_| GmailError::Auth("GOOGLE_CLIENT_ID environment variable not set".to_string()))?;
+            .map_err(|_| GmailError::Auth("GOOGLE_CLIENT_ID environment variable not set".to_string()).with_platform_hint())?;
         
         let client_secret = std::env::var("GOOGLE_CLIENT_SECRET")
-            .map_err(|_| GmailError::Auth("GOOGLE_CLIENT_SECRET environment variable not set".to_string()))?;
+            .map_err(|_| GmailError::Auth("GOOGLE_CLIENT_SECRET environment variable not set".to_string()).with_platform_hint())?;
         
         Ok(Self {
             client_id,

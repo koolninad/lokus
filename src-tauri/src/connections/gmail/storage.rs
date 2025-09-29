@@ -5,40 +5,56 @@ use serde_json;
 
 const GMAIL_TOKEN_KEY: &str = "lokus_gmail_token";
 const GMAIL_PROFILE_KEY: &str = "lokus_gmail_profile";
+#[cfg(target_os = "windows")]
+const SERVICE_NAME: &str = "Lokus";
+#[cfg(not(target_os = "windows"))]
 const SERVICE_NAME: &str = "com.pratham.lokus.gmail";
 
 pub struct GmailStorage;
 
 impl GmailStorage {
     fn get_keyring_entry(key: &str) -> Result<Entry, GmailError> {
-        Entry::new(SERVICE_NAME, key)
-            .map_err(|e| GmailError::Storage(format!("Failed to create keyring entry: {}", e)))
+        // On Windows, use a simpler service name and handle potential errors
+        #[cfg(target_os = "windows")]
+        {
+            Entry::new(SERVICE_NAME, &format!("lokus_gmail_{}", key))
+                .map_err(|e| GmailError::Storage(format!("Failed to create keyring entry: {}", e)))
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Entry::new(SERVICE_NAME, key)
+                .map_err(|e| GmailError::Storage(format!("Failed to create keyring entry: {}", e)))
+        }
     }
 
     pub fn store_token(token: &GmailToken) -> Result<(), GmailError> {
         // println!("[GMAIL] 🔑 Storing Gmail token: service={}, key={}", SERVICE_NAME, GMAIL_TOKEN_KEY);
         
-        // In development mode, use file storage as fallback due to keychain issues
-        if cfg!(debug_assertions) {
-            // println!("[GMAIL] 🔑 Using file storage for development mode");
+        // In development mode or on Windows, prefer file storage for reliability
+        #[cfg(any(debug_assertions, target_os = "windows"))]
+        {
+            // println!("[GMAIL] 🔑 Using file storage for development mode or Windows");
             return Self::store_token_to_file(token);
         }
         
-        let entry = Self::get_keyring_entry(GMAIL_TOKEN_KEY)?;
-        // println!("[GMAIL] 🔑 Keyring entry created for Gmail token storage");
-        
-        let token_json = serde_json::to_string(token)
-            .map_err(|e| GmailError::Storage(format!("Failed to serialize Gmail token: {}", e)))?;
-        // println!("[GMAIL] 🔑 Gmail token serialized, length: {} chars", token_json.len());
-        
-        match entry.set_password(&token_json) {
-            Ok(_) => {
-                // println!("[GMAIL] 🔑 Gmail token stored in keyring successfully");
-                Ok(())
-            },
-            Err(e) => {
-                // println!("[GMAIL] 🔑 Failed to store Gmail token: {:?}", e);
-                Err(GmailError::Storage(format!("Failed to store Gmail token: {}", e)))
+        #[cfg(not(any(debug_assertions, target_os = "windows")))]
+        {
+            let entry = Self::get_keyring_entry(GMAIL_TOKEN_KEY)?;
+            // println!("[GMAIL] 🔑 Keyring entry created for Gmail token storage");
+            
+            let token_json = serde_json::to_string(token)
+                .map_err(|e| GmailError::Storage(format!("Failed to serialize Gmail token: {}", e)))?;
+            // println!("[GMAIL] 🔑 Gmail token serialized, length: {} chars", token_json.len());
+            
+            match entry.set_password(&token_json) {
+                Ok(_) => {
+                    // println!("[GMAIL] 🔑 Gmail token stored in keyring successfully");
+                    Ok(())
+                },
+                Err(e) => {
+                    // println!("[GMAIL] 🔑 Failed to store Gmail token: {:?}", e);
+                    Err(GmailError::Storage(format!("Failed to store Gmail token: {}", e)))
+                }
             }
         }
     }
@@ -46,39 +62,44 @@ impl GmailStorage {
     pub fn get_token() -> Result<Option<GmailToken>, GmailError> {
         // println!("[GMAIL] 🔑 Getting keyring entry for Gmail token: service={}, key={}", SERVICE_NAME, GMAIL_TOKEN_KEY);
         
-        // In development mode, use file storage as fallback due to keychain issues
-        if cfg!(debug_assertions) {
-            // println!("[GMAIL] 🔑 Using file storage for development mode");
+        // In development mode or on Windows, prefer file storage for reliability
+        #[cfg(any(debug_assertions, target_os = "windows"))]
+        {
+            // println!("[GMAIL] 🔑 Using file storage for development mode or Windows");
             return Self::get_token_from_file();
         }
         
-        let entry = Self::get_keyring_entry(GMAIL_TOKEN_KEY)?;
-        // println!("[GMAIL] 🔑 Keyring entry created successfully");
-        
-        match entry.get_password() {
-            Ok(token_json) => {
-                // println!("[GMAIL] 🔑 Gmail token found in keyring");
-                let token: GmailToken = serde_json::from_str(&token_json)
-                    .map_err(|e| GmailError::Storage(format!("Failed to deserialize Gmail token: {}", e)))?;
-                // println!("[GMAIL] 🔑 Gmail token deserialized successfully");
-                Ok(Some(token))
+        #[cfg(not(any(debug_assertions, target_os = "windows")))]
+        {
+            let entry = Self::get_keyring_entry(GMAIL_TOKEN_KEY)?;
+            // println!("[GMAIL] 🔑 Keyring entry created successfully");
+            
+            match entry.get_password() {
+                Ok(token_json) => {
+                    // println!("[GMAIL] 🔑 Gmail token found in keyring");
+                    let token: GmailToken = serde_json::from_str(&token_json)
+                        .map_err(|e| GmailError::Storage(format!("Failed to deserialize Gmail token: {}", e)))?;
+                    // println!("[GMAIL] 🔑 Gmail token deserialized successfully");
+                    Ok(Some(token))
+                }
+                Err(keyring::Error::NoEntry) => {
+                    // println!("[GMAIL] 🔑 No Gmail token entry found in keyring");
+                    Ok(None)
+                },
+                Err(e) => {
+                    // println!("[GMAIL] 🔑 Keyring error: {:?}", e);
+                    Err(GmailError::Storage(format!("Failed to retrieve Gmail token: {}", e)))
+                },
             }
-            Err(keyring::Error::NoEntry) => {
-                // println!("[GMAIL] 🔑 No Gmail token entry found in keyring");
-                Ok(None)
-            },
-            Err(e) => {
-                // println!("[GMAIL] 🔑 Keyring error: {:?}", e);
-                Err(GmailError::Storage(format!("Failed to retrieve Gmail token: {}", e)))
-            },
         }
     }
 
     pub fn delete_token() -> Result<(), GmailError> {
         // println!("[GMAIL] 🔑 Deleting Gmail token");
         
-        // In development mode, delete from file storage
-        if cfg!(debug_assertions) {
+        // In development mode or on Windows, delete from file storage
+        #[cfg(any(debug_assertions, target_os = "windows"))]
+        {
             let token_path = Self::get_dev_token_path()?;
             if token_path.exists() {
                 std::fs::remove_file(&token_path)
@@ -88,51 +109,63 @@ impl GmailStorage {
             return Ok(());
         }
         
-        let entry = Self::get_keyring_entry(GMAIL_TOKEN_KEY)?;
-        entry.delete_credential()
-            .map_err(|e| GmailError::Storage(format!("Failed to delete Gmail token: {}", e)))
+        #[cfg(not(any(debug_assertions, target_os = "windows")))]
+        {
+            let entry = Self::get_keyring_entry(GMAIL_TOKEN_KEY)?;
+            entry.delete_credential()
+                .map_err(|e| GmailError::Storage(format!("Failed to delete Gmail token: {}", e)))
+        }
     }
 
     pub fn store_profile(profile: &GmailProfile) -> Result<(), GmailError> {
         // println!("[GMAIL] 🔑 Storing Gmail profile");
         
-        // In development mode, use file storage
-        if cfg!(debug_assertions) {
+        // In development mode or on Windows, use file storage
+        #[cfg(any(debug_assertions, target_os = "windows"))]
+        {
             return Self::store_profile_to_file(profile);
         }
         
-        let entry = Self::get_keyring_entry(GMAIL_PROFILE_KEY)?;
-        let profile_json = serde_json::to_string(profile)
-            .map_err(|e| GmailError::Storage(format!("Failed to serialize Gmail profile: {}", e)))?;
-        entry.set_password(&profile_json)
-            .map_err(|e| GmailError::Storage(format!("Failed to store Gmail profile: {}", e)))
+        #[cfg(not(any(debug_assertions, target_os = "windows")))]
+        {
+            let entry = Self::get_keyring_entry(GMAIL_PROFILE_KEY)?;
+            let profile_json = serde_json::to_string(profile)
+                .map_err(|e| GmailError::Storage(format!("Failed to serialize Gmail profile: {}", e)))?;
+            entry.set_password(&profile_json)
+                .map_err(|e| GmailError::Storage(format!("Failed to store Gmail profile: {}", e)))
+        }
     }
 
     pub fn get_profile() -> Result<Option<GmailProfile>, GmailError> {
         // println!("[GMAIL] 🔑 Getting Gmail profile");
         
-        // In development mode, use file storage
-        if cfg!(debug_assertions) {
+        // In development mode or on Windows, use file storage
+        #[cfg(any(debug_assertions, target_os = "windows"))]
+        {
             return Self::get_profile_from_file();
         }
         
-        let entry = Self::get_keyring_entry(GMAIL_PROFILE_KEY)?;
-        match entry.get_password() {
-            Ok(profile_json) => {
-                let profile: GmailProfile = serde_json::from_str(&profile_json)
-                    .map_err(|e| GmailError::Storage(format!("Failed to deserialize Gmail profile: {}", e)))?;
-                Ok(Some(profile))
+        #[cfg(not(any(debug_assertions, target_os = "windows")))]
+        {
+            let entry = Self::get_keyring_entry(GMAIL_PROFILE_KEY)?;
+            match entry.get_password() {
+                Ok(profile_json) => {
+                    let profile: GmailProfile = serde_json::from_str(&profile_json)
+                        .map_err(|e| GmailError::Storage(format!("Failed to deserialize Gmail profile: {}", e)))?;
+                    Ok(Some(profile))
+                }
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(e) => Err(GmailError::Storage(format!("Failed to retrieve Gmail profile: {}", e))),
             }
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(GmailError::Storage(format!("Failed to retrieve Gmail profile: {}", e))),
         }
     }
 
     pub fn delete_profile() -> Result<(), GmailError> {
         // println!("[GMAIL] 🔑 Deleting Gmail profile");
         
-        // In development mode, delete from file storage
-        if cfg!(debug_assertions) {
+        // In development mode or on Windows, delete from file storage
+        #[cfg(any(debug_assertions, target_os = "windows"))]
+        {
             let profile_path = Self::get_dev_profile_path()?;
             if profile_path.exists() {
                 std::fs::remove_file(&profile_path)
@@ -142,9 +175,12 @@ impl GmailStorage {
             return Ok(());
         }
         
-        let entry = Self::get_keyring_entry(GMAIL_PROFILE_KEY)?;
-        entry.delete_credential()
-            .map_err(|e| GmailError::Storage(format!("Failed to delete Gmail profile: {}", e)))
+        #[cfg(not(any(debug_assertions, target_os = "windows")))]
+        {
+            let entry = Self::get_keyring_entry(GMAIL_PROFILE_KEY)?;
+            entry.delete_credential()
+                .map_err(|e| GmailError::Storage(format!("Failed to delete Gmail profile: {}", e)))
+        }
     }
 
     pub fn is_token_expired(token: &GmailToken) -> bool {

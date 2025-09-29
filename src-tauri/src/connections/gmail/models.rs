@@ -161,12 +161,44 @@ pub enum GmailError {
     Parse(String),
 }
 
+impl GmailError {
+    pub fn with_platform_hint(self) -> Self {
+        match self {
+            #[cfg(target_os = "windows")]
+            GmailError::Storage(msg) if msg.contains("keyring") => {
+                GmailError::Storage(format!(
+                    "{}. Windows Credential Manager may require administrator permissions or be disabled by group policy",
+                    msg
+                ))
+            },
+            #[cfg(target_os = "windows")]
+            GmailError::Auth(msg) if msg.contains("environment variable") => {
+                GmailError::Auth(format!(
+                    "{}. On Windows, set environment variables in System Properties or use 'setx' command",
+                    msg
+                ))
+            },
+            _ => self
+        }
+    }
+}
+
 impl From<reqwest::Error> for GmailError {
     fn from(err: reqwest::Error) -> Self {
         if err.is_timeout() {
             GmailError::Network("Request timeout".to_string())
         } else if err.is_connect() {
-            GmailError::Network("Connection failed".to_string())
+            #[cfg(target_os = "windows")]
+            {
+                GmailError::Network(format!(
+                    "Connection failed: {}. Windows Firewall or antivirus may be blocking the connection",
+                    err
+                ))
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                GmailError::Network("Connection failed".to_string())
+            }
         } else {
             GmailError::Network(err.to_string())
         }

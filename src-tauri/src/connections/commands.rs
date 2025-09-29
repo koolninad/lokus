@@ -53,7 +53,14 @@ pub async fn gmail_check_auth_callback() -> Result<Option<(String, String)>, Str
                         data["state"].as_str()
                     ) {
                         // Delete the file after reading
-                        let _ = fs::remove_file(&auth_file);
+                        match fs::remove_file(&auth_file) {
+                            Ok(_) => println!("[GMAIL] 📥 Auth callback file deleted"),
+                            Err(e) => {
+                                println!("[GMAIL] ⚠️ Warning: Could not delete auth file: {}", e);
+                                #[cfg(target_os = "windows")]
+                                println!("[GMAIL] 🤖 Windows: File may be locked by another process");
+                            }
+                        }
                         println!("[GMAIL] 📥 Auth callback received: code={}, state={}", 
                                  &code[..20.min(code.len())], state);
                         
@@ -63,6 +70,10 @@ pub async fn gmail_check_auth_callback() -> Result<Option<(String, String)>, Str
             }
             Err(e) => {
                 println!("[GMAIL] ❌ Error reading auth callback file: {}", e);
+                #[cfg(target_os = "windows")]
+                {
+                    println!("[GMAIL] 🤖 Windows: Check file permissions or anti-virus software");
+                }
             }
         }
     }

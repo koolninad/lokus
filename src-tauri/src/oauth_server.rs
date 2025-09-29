@@ -15,6 +15,7 @@ use hyper::body::Bytes;
 type HyperResponse = hyper::Response<Full<Bytes>>;
 
 const OAUTH_PORT: u16 = 8080;
+const FALLBACK_PORTS: [u16; 3] = [8081, 8082, 8083];
 
 #[derive(Clone)]
 pub struct OAuthServer {
@@ -35,16 +36,38 @@ impl OAuthServer {
             return Ok(());
         }
 
-        println!("[OAUTH SERVER] 🚀 Starting Gmail OAuth callback server on port {}", OAUTH_PORT);
+        println!("[OAUTH SERVER] 🚀 Starting Gmail OAuth callback server");
 
-        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], OAUTH_PORT));
-        let listener = TcpListener::bind(addr).await?;
+        // Try primary port first, then fallback ports
+        let mut listener = None;
+        let mut actual_port = OAUTH_PORT;
+        
+        for port in std::iter::once(OAUTH_PORT).chain(FALLBACK_PORTS.iter().cloned()) {
+            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+            match TcpListener::bind(addr).await {
+                Ok(l) => {
+                    listener = Some(l);
+                    actual_port = port;
+                    break;
+                },
+                Err(e) => {
+                    println!("[OAUTH SERVER] ⚠️ Failed to bind to port {}: {}", port, e);
+                }
+            }
+        }
+        
+        let listener = listener.ok_or("Failed to bind to any available port")?;
 
         *running = true;
         drop(running);
 
-        println!("[OAUTH SERVER] 🌐 Gmail OAuth callback server running at http://localhost:{}", OAUTH_PORT);
-        println!("[OAUTH SERVER] 📍 Callback URL: http://localhost:{}/gmail-callback", OAUTH_PORT);
+        println!("[OAUTH SERVER] 🌐 Gmail OAuth callback server running at http://localhost:{}", actual_port);
+        println!("[OAUTH SERVER] 📍 Callback URL: http://localhost:{}/gmail-callback", actual_port);
+        
+        #[cfg(target_os = "windows")]
+        {
+            println!("[OAUTH SERVER] 🤖 Windows: If the server fails to start, please check Windows Firewall settings");
+        }
 
         let running_clone = self.running.clone();
         tokio::spawn(async move {
@@ -224,9 +247,10 @@ fn write_auth_callback(code: &str, state: &str) -> Result<(), Box<dyn std::error
     let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
     let temp_dir = home_dir.join(".lokus").join("temp");
     
-    // Ensure temp directory exists
+    // Ensure temp directory exists with proper error handling for Windows
     if !temp_dir.exists() {
-        fs::create_dir_all(&temp_dir)?;
+        fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("Failed to create directory {}: {}", temp_dir.display(), e))?;
     }
     
     let auth_file = temp_dir.join("gmail_auth_callback.json");
@@ -236,8 +260,10 @@ fn write_auth_callback(code: &str, state: &str) -> Result<(), Box<dyn std::error
         "timestamp": chrono::Utc::now().timestamp()
     });
     
-    fs::write(&auth_file, serde_json::to_string_pretty(&auth_data)?)?;
-    println!("[OAUTH SERVER] 💾 Auth data written to: {:?}", auth_file);
+    // Write with explicit permissions for Windows
+    fs::write(&auth_file, serde_json::to_string_pretty(&auth_data)?)
+        .map_err(|e| format!("Failed to write auth file {}: {}", auth_file.display(), e))?;
+    println!("[OAUTH SERVER] 💾 Auth data written to: {}", auth_file.display());
     
     Ok(())
 }
