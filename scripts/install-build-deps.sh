@@ -81,7 +81,7 @@ else
     echo -e "${YELLOW}Building Docker image (this may take a few minutes)...${NC}"
 fi
 
-docker build -t lokus-linux-builder -f docker/Dockerfile.linux-builder .
+docker build --platform linux/amd64 -t lokus-linux-builder -f docker/Dockerfile.linux-builder .
 
 echo -e "\n${GREEN}═══════════════════════════════════════════════${NC}"
 echo -e "${GREEN}✓ All dependencies installed successfully!${NC}"

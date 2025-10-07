@@ -1,7 +1,8 @@
 # Linux Build Environment for Lokus
 # Based on Ubuntu 22.04 with all Tauri dependencies
+# Force amd64 platform for proper Linux builds from ARM64 Macs
 
-FROM ubuntu:22.04
+FROM --platform=linux/amd64 ubuntu:22.04
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive

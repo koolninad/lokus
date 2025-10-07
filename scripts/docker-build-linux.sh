@@ -22,7 +22,7 @@ fi
 # Check if image exists
 if ! docker images | grep -q "lokus-linux-builder"; then
     echo -e "${YELLOW}Linux builder image not found. Building...${NC}"
-    docker build -t lokus-linux-builder -f docker/Dockerfile.linux-builder .
+    docker build --platform linux/amd64 -t lokus-linux-builder -f docker/Dockerfile.linux-builder .
 fi
 
 # Get project root
@@ -38,6 +38,7 @@ rm -rf "$PROJECT_ROOT/src-tauri/target/release/bundle/appimage"
 echo -e "${BLUE}Starting Docker build (this may take 10-15 minutes)...${NC}\n"
 
 docker run --rm \
+    --platform linux/amd64 \
     -v "$PROJECT_ROOT:/app" \
     -w /app \
     -e GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID}" \
