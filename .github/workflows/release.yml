@@ -25,7 +25,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
@@ -56,25 +56,81 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          VITE_AUTH_BASE_URL: https://lokusmd.com
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Lokus ${{ github.ref_name }}'
           releaseBody: |
             🚀 **Lokus ${{ github.ref_name }}** is now available!
-            
-            ### 📦 Downloads
-            Choose the appropriate installer for your platform:
-            - **🍎 macOS**: Download the `.dmg` file
-            - **🪟 Windows**: Download the `.msi` installer  
-            - **🐧 Linux**: Download the `.deb`, `.rpm`, or `.AppImage` file
-            
-            ### ✨ Features
-            - 🎨 Rich text editing with TipTap
-            - 📝 Full Markdown support
-            - 🔗 Wiki links with autocomplete
-            - 🧮 LaTeX math equations
-            - 📧 Gmail integration with OAuth 2.0
-            - 🧠 68 AI-powered MCP tools
-            - 🎨 Advanced themes and customization
+
+            ## What's New
+
+            ### 📊 Bases - Notion-like Database System
+            - **Table Views** - Organize notes in sortable, filterable tables
+            - **Auto-create** - Default "All Notes" base created on first use
+            - **Custom Properties** - Add metadata without frontmatter
+            - **Multiple Views** - Table, Gallery, Calendar views (coming soon)
+            - **Smart Filters** - Query notes by tags, dates, properties
+
+            ### 🔐 Authentication & Gmail Fixes
+            - **Fixed email confirmation URLs** - Now point to lokusmd.com instead of localhost
+            - **Gmail OAuth** - Updated credentials and fixed integration
+            - **Production-ready auth** - All endpoints use production backend
+
+            ### 🏗️ Local Build System
+            - **Docker-based Linux builds** - Build all platforms locally on macOS
+            - **Windows portable** - Added portable .exe to bundle targets
+            - **Complete documentation** - BUILD.md and ENVIRONMENT_VARIABLES.md
+            - **Organized output** - All installers in dist-release/ folder
+
+            ---
+
+            ## 📦 Downloads
+
+            Choose the installer for your platform:
+
+            ### 🍎 macOS
+            - **DMG**: `Lokus_x.x.x_universal.dmg` (Intel + Apple Silicon)
+            - Minimum: macOS 10.15+
+
+            ### 🪟 Windows
+            - **MSI Installer**: `Lokus_x.x.x_x64_en-US.msi` (Traditional installer)
+            - **NSIS Installer**: `Lokus_x.x.x_x64-setup.exe` (Modern with auto-updater)
+            - **Portable**: `Lokus.exe` (No installation required)
+            - Minimum: Windows 10 64-bit
+
+            ### 🐧 Linux
+            - **DEB**: `lokus_x.x.x_amd64.deb` (Ubuntu, Debian)
+            - **RPM**: `lokus_x.x.x_x86_64.rpm` (Fedora, RHEL, CentOS)
+            - **AppImage**: `lokus_x.x.x_amd64.AppImage` (Universal)
+
+            ---
+
+            ## ✨ Core Features
+
+            - 📝 **Rich Markdown Editor** - Full GitHub Flavored Markdown support
+            - 🔗 **Wiki Links** - Bidirectional linking with `[[Note Name]]` syntax
+            - 🧮 **LaTeX Math** - Inline `$x^2$` and block `$$E=mc^2$$` equations
+            - 🕸️ **2D/3D Knowledge Graph** - Interactive visualization of note connections
+            - 📊 **Database Views (Bases)** - Notion-like tables for your notes
+            - 📧 **Gmail Integration** - Import/send emails as markdown notes
+            - 🎨 **Theme Customization** - Real-time theme editor
+            - 🔌 **Plugin System** - VS Code-like extension API
+            - 🚀 **Blazing Fast** - Rust backend, ~10MB download, sub-second startup
+
+            ---
+
+            ## 📖 Documentation
+
+            - [Installation Guide](https://github.com/lokus-ai/lokus/blob/main/INSTALLATION.md)
+            - [Build Guide](https://github.com/lokus-ai/lokus/blob/main/BUILD.md)
+            - [Contributing Guide](https://github.com/lokus-ai/lokus/blob/main/CONTRIBUTING.md)
+            - [Environment Variables](https://github.com/lokus-ai/lokus/blob/main/docs/ENVIRONMENT_VARIABLES.md)
+
+            ---
+
+            **Full Changelog**: https://github.com/lokus-ai/lokus/compare/v1.2.3...${{ github.ref_name }}
           releaseDraft: false
           prerelease: false
