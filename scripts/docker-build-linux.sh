@@ -46,8 +46,11 @@ docker run --rm \
     lokus-linux-builder \
     bash -c "
         set -e
+        echo '🧹 Cleaning package cache...'
+        rm -rf node_modules package-lock.json
+
         echo '📦 Installing npm dependencies...'
-        npm ci
+        npm install
 
         echo '🏗️  Building frontend...'
         npm run build
