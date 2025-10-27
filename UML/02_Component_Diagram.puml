@@ -1,0 +1,248 @@
+@startuml Component Diagram - Core System
+!theme plain
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+title Lokus - Detailed Component Diagram
+
+package "Presentation Layer" {
+    [App.jsx\nRoot Component] as App
+    [Launcher] as Launcher
+    [Workspace\n171KB] as Workspace
+    [Preferences\n143KB] as Prefs
+
+    package "Workspace Components" {
+        [EditorGroups\nMulti-tab] as EditorGroups
+        [FileTree\nNavigation] as FileTree
+        [CommandPalette\n52KB] as CommandPalette
+        [FullTextSearch] as Search
+        [GraphView\n3D/2D] as Graph
+        [Canvas\nTLDraw] as Canvas
+        [KanbanBoard] as Kanban
+        [BasesView\nDatabase] as Bases
+        [StatusBar] as StatusBar
+    }
+}
+
+package "State Management" {
+    [AuthContext\nAuthentication] as AuthCtx
+    [GmailContext\nEmail Sync] as GmailCtx
+    [PluginContext\nPlugin System] as PluginCtx
+    [FolderScopeContext] as FolderCtx
+
+    [PluginManager\nLifecycle] as PluginMgr
+    [PluginStateManager\nState Sync] as PluginState
+    [WorkspaceManager\nWorkspace Operations] as WorkspaceMgr
+}
+
+package "Custom Hooks" {
+    [useEditorGroups] as useEditor
+    [usePlugins] as usePlugins
+    [useGmail] as useGmail
+    [useWorkspaceActivation] as useWorkspace
+    [usePreferenceActivation] as usePrefs
+}
+
+package "Editor System" {
+    component [Editor.jsx\nTipTap Core] as EditorCore
+
+    package "Extensions (24)" {
+        [Math (KaTeX)] as MathExt
+        [WikiLink] as WikiLinkExt
+        [LocalImage] as ImageExt
+        [TaskItems] as TaskExt
+        [CodeBlock\nSyntax Highlighting] as CodeExt
+        [Table\nResizable] as TableExt
+        [Callout] as CalloutExt
+        [...18 more] as MoreExt
+    }
+}
+
+package "Services" {
+    [PlatformService\nOS Abstraction] as PlatformSvc
+    [GmailService\nEmail Integration] as GmailSvc
+    [MCPClient\nAI Integration] as MCPClientSvc
+}
+
+package "Core Logic" {
+    package "Graph" {
+        [GraphEngine\nPhysics Sim] as GraphEngine
+        [GraphDataProcessor\nLink Analysis] as GraphProc
+        [BacklinkManager] as Backlinks
+    }
+
+    package "Search" {
+        [search-engine.js\nMiniSearch] as SearchEngine
+        [fuzzy-matcher.js] as FuzzyMatcher
+    }
+
+    package "Markdown" {
+        [compiler.js] as MDCompiler
+        [syntax-config.js] as MDSyntax
+    }
+
+    package "Plugins" {
+        [LokusPluginAPI\n50+ Methods] as PluginAPI
+        [PluginLoader] as PluginLoader
+        [EventEmitter] as EventEmitter
+    }
+}
+
+package "Tauri Backend (Rust)" {
+    package "Handlers" {
+        [files.rs\nFile Operations] as FilesHandler
+        [platform_files.rs] as PlatformFiles
+        [version_history.rs\nGit Integration] as VersionHistory
+    }
+
+    package "Core Services" {
+        [main.rs\n395+ Commands] as Main
+        [auth.rs\nOAuth2 + PKCE] as AuthRust
+        [search.rs\nRegex Search] as SearchRust
+        [plugins.rs\nPlugin Loader] as PluginsRust
+        [tasks.rs\nTask Management] as TasksRust
+        [kanban.rs\nBoard Management] as KanbanRust
+        [theme.rs\nTheme System] as ThemeRust
+    }
+
+    package "Integrations" {
+        [oauth_server.rs\nLocalhost Server] as OAuthServer
+        [api_server.rs\nHTTP API] as APIServer
+        [mcp_embedded.rs\nMCP Server] as MCPServer
+        [connections/gmail/] as GmailRust
+    }
+
+    package "Security" {
+        [secure_storage.rs\nAES-GCM] as SecureStorage
+        [session validation] as SessionValidation
+    }
+}
+
+' ===== KEY RELATIONSHIPS =====
+
+' App Structure
+App --> Launcher
+App --> Workspace
+App --> Prefs
+
+' Context Providers
+App ..> AuthCtx : provides
+App ..> GmailCtx : provides
+App ..> PluginCtx : provides
+
+' Workspace Composition
+Workspace *-- EditorGroups
+Workspace *-- FileTree
+Workspace *-- CommandPalette
+Workspace *-- Search
+Workspace *-- Graph
+Workspace *-- Canvas
+Workspace *-- Kanban
+Workspace *-- Bases
+Workspace *-- StatusBar
+
+' Editor System
+EditorGroups --> EditorCore
+EditorCore *-- MathExt
+EditorCore *-- WikiLinkExt
+EditorCore *-- ImageExt
+EditorCore *-- TaskExt
+EditorCore *-- CodeExt
+EditorCore *-- TableExt
+EditorCore *-- CalloutExt
+EditorCore *-- MoreExt
+
+' State Management Flow
+Workspace --> useEditor
+Workspace --> usePlugins
+Workspace --> useWorkspace
+useEditor --> EditorGroups
+usePlugins --> PluginMgr
+PluginMgr --> PluginState
+PluginMgr --> PluginAPI
+
+' Plugin System
+PluginCtx --> PluginMgr
+PluginMgr --> PluginLoader
+PluginLoader --> PluginsRust : invoke()
+PluginAPI --> EventEmitter
+
+' Graph System
+Graph --> GraphEngine
+Graph --> GraphProc
+GraphProc --> Backlinks
+GraphEngine --> FilesHandler : read links
+
+' Search System
+Search --> SearchEngine
+Search --> FuzzyMatcher
+CommandPalette --> SearchEngine
+Search --> SearchRust : deep search
+
+' Services
+GmailCtx --> GmailSvc
+GmailSvc --> GmailRust : invoke()
+Workspace --> MCPClientSvc
+MCPClientSvc --> MCPServer
+
+' Backend Communication
+FilesHandler --> Main : register commands
+AuthRust --> Main : register commands
+SearchRust --> Main : register commands
+PluginsRust --> Main : register commands
+
+' Authentication Flow
+AuthCtx --> AuthRust : invoke()
+AuthRust --> OAuthServer : start server
+AuthRust --> SecureStorage : encrypt tokens
+
+' File Operations
+EditorGroups --> FilesHandler : save/read
+FileTree --> FilesHandler : list/rename
+FileTree --> PlatformFiles : OS operations
+
+' Theme System
+Prefs --> ThemeRust : manage themes
+App --> ThemeRust : load theme
+
+note right of Workspace
+  **Monolithic Component**
+  - 171 KB (4,500+ lines)
+  - Multiple responsibilities
+  - High coupling
+  - REFACTOR TARGET
+end note
+
+note right of PluginState
+  **Critical Bug Fix**
+  - Fixes "enabled: undefined"
+  - Prevents race conditions
+  - State synchronization
+  - Uses locking mechanism
+end note
+
+note bottom of Main
+  **Command Explosion**
+  - 395+ registered commands
+  - No namespacing
+  - All loaded at startup
+  - REFACTOR: Group by domain
+end note
+
+note right of GraphEngine
+  **Performance Bottleneck**
+  - O(n²) force calculation
+  - No spatial partitioning
+  - Struggles at 500+ nodes
+  - OPTIMIZE: Barnes-Hut
+end note
+
+note bottom of SearchRust
+  **Scalability Issue**
+  - O(n) file traversal
+  - No indexing
+  - Regex on every file
+  - IMPROVE: Add SQLite index
+end note
+
+@enduml

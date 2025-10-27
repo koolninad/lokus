@@ -269,6 +269,8 @@ fn main() {
       handlers::files::delete_file,
       handlers::files::reveal_in_finder,
       handlers::files::open_terminal,
+      handlers::files::save_image_to_workspace,
+      handlers::files::read_binary_file,
       handlers::platform_files::platform_reveal_in_file_manager,
       handlers::platform_files::platform_open_terminal,
       handlers::platform_files::get_platform_information,

@@ -1,0 +1,192 @@
+@startuml Authentication Flow - OAuth2 PKCE
+!theme plain
+autonumber
+
+title Lokus Authentication Flow - OAuth2 with PKCE
+
+actor User
+participant "Frontend\n(React)" as Frontend
+participant "AuthContext" as AuthCtx
+participant "Tauri IPC" as IPC
+participant "auth.rs\n(Rust)" as Auth
+participant "OAuth Server\n(localhost:3333)" as OAuth
+participant "Secure Storage\n(AES-GCM)" as Storage
+participant "External Auth\nProvider" as Provider
+participant "OS Keychain" as Keychain
+
+== Initiation Phase ==
+
+User -> Frontend: Click "Sign In"
+Frontend -> AuthCtx: initiateAuth()
+AuthCtx -> IPC: invoke('initiate_oauth_flow')
+IPC -> Auth: initiate_oauth_flow()
+
+Auth -> Auth: generate_pkce_pair()\n(code_verifier, code_challenge)
+note right
+  PKCE Security:
+  - code_verifier: 128 random chars
+  - code_challenge: SHA256(verifier)
+  Prevents authorization code interception
+end note
+
+Auth -> Auth: generate_state()\n(UUID for CSRF protection)
+Auth -> Auth: find_available_port()\n(3333-3400 range)
+
+Auth -> OAuth: start_localhost_server(port)
+activate OAuth
+OAuth -> OAuth: Listen on 127.0.0.1:port/auth/callback
+
+Auth -> Auth: Build authorization URL\n+ code_challenge\n+ state\n+ redirect_uri
+
+Auth --> IPC: Return auth_url
+IPC --> AuthCtx: auth_url
+AuthCtx --> Frontend: auth_url
+
+Frontend -> User: Open browser with auth_url
+
+== User Authentication ==
+
+User -> Provider: Navigate to auth provider
+User -> Provider: Enter credentials
+User -> Provider: Authorize application
+
+Provider -> Provider: Validate credentials
+Provider -> Provider: Generate authorization code
+
+== OAuth Callback ==
+
+Provider -> OAuth: Redirect to\nlocalhost:3333/auth/callback\n?code=XXX&state=YYY
+
+OAuth -> OAuth: handle_localhost_request()
+OAuth -> OAuth: Validate state parameter
+
+alt State Valid
+    OAuth -> Auth: handle_oauth_callback_internal(code, state)
+    Auth -> Auth: Retrieve PKCE data from state
+    Auth -> Auth: Verify state matches
+
+    == Token Exchange ==
+
+    Auth -> Provider: POST /api/auth/token\n+ code\n+ code_verifier\n+ redirect_uri
+    note right
+      PKCE: Provider verifies
+      SHA256(code_verifier) == code_challenge
+      from original request
+    end note
+
+    Provider -> Provider: Validate code_verifier
+    Provider --> Auth: access_token,\nrefresh_token,\nexpires_in
+
+    Auth -> Auth: Create AuthToken struct\n+ expires_at calculation
+
+    == Secure Storage ==
+
+    Auth -> Storage: store_token(token)
+    Storage -> Storage: AES-GCM encrypt(token)\n+ random nonce
+    Storage -> Keychain: Store encrypted token
+    note right
+      macOS: Keychain Services
+      Windows: Credential Manager
+      Linux: libsecret
+    end note
+
+    == User Profile ==
+
+    Auth -> Provider: GET /api/auth/profile\n+ Bearer token
+    Provider --> Auth: User profile JSON
+    Auth -> Storage: store_user_profile(profile)
+    Storage -> Keychain: Store encrypted profile
+
+    Auth -> OAuth: Clear PKCE data
+    deactivate OAuth
+
+    Auth --> IPC: Success
+    IPC --> AuthCtx: auth-success event
+    AuthCtx -> Frontend: Update UI (authenticated)
+    Frontend -> User: "Welcome back!"
+
+else State Invalid
+    OAuth --> User: Show error page
+    OAuth -> Frontend: Emit auth-error event
+    Frontend -> User: "Authentication failed"
+end
+
+== Session Validation (Subsequent Requests) ==
+
+User -> Frontend: Open app
+Frontend -> AuthCtx: Check auth status
+AuthCtx -> IPC: invoke('is_authenticated')
+IPC -> Auth: is_authenticated()
+
+Auth -> Storage: get_token()
+Storage -> Storage: Check session validity\n(created < 30 days ago)
+
+alt Session Valid
+    Storage -> Keychain: Retrieve encrypted token
+    Keychain --> Storage: Encrypted data
+    Storage -> Storage: AES-GCM decrypt(token)
+    Storage --> Auth: AuthToken
+
+    Auth -> Auth: Check token expiration
+
+    alt Token Expired
+        Auth -> Auth: refresh_auth_token()
+        Auth -> Provider: POST /api/auth/refresh\n+ refresh_token
+        Provider --> Auth: New access_token
+        Auth -> Storage: store_token(new_token)
+        Storage -> Keychain: Update encrypted token
+    end
+
+    Auth --> IPC: true (authenticated)
+    IPC --> AuthCtx: true
+    AuthCtx -> Frontend: Restore session
+    Frontend -> User: App ready
+
+else Session Invalid
+    Storage -> Storage: clear_all()
+    Storage -> Keychain: Delete tokens
+    Auth --> IPC: false
+    IPC --> AuthCtx: false
+    AuthCtx -> Frontend: Show sign-in
+    Frontend -> User: "Please sign in"
+end
+
+== Logout Flow ==
+
+User -> Frontend: Click "Logout"
+Frontend -> AuthCtx: logout()
+AuthCtx -> IPC: invoke('logout')
+IPC -> Auth: logout()
+
+Auth -> Storage: clear_all_secure_data()
+Storage -> Keychain: Delete all tokens
+Storage -> Keychain: Delete profile
+Storage -> Storage: Clear session data
+
+Auth --> IPC: Success
+IPC --> AuthCtx: Logged out
+AuthCtx -> Frontend: Reset state
+Frontend -> User: "Signed out successfully"
+
+note over Frontend, Keychain
+  **Security Features:**
+  1. PKCE prevents authorization code interception
+  2. State parameter prevents CSRF attacks
+  3. AES-GCM encryption for token storage
+  4. OS-level keychain for secrets
+  5. Session expiration (30 days)
+  6. Automatic token refresh
+  7. Localhost server (one-time use)
+end note
+
+note over OAuth
+  **Port Range Problem:**
+  Tries 3333-3400 sequentially
+  Can conflict with other services
+  No graceful degradation if all ports busy
+
+  **RECOMMENDATION:**
+  Use deep links only, remove localhost server
+end note
+
+@enduml

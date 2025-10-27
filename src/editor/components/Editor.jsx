@@ -8,7 +8,7 @@ import EditorContextMenu from "../../components/EditorContextMenu.jsx";
 import * as LinkExt from "@tiptap/extension-link";
 import * as TaskListExt from "@tiptap/extension-task-list";
 import * as TaskItemExt from "@tiptap/extension-task-item";
-import * as ImageExt from "@tiptap/extension-image";
+import LocalImage from "../extensions/LocalImage.js";
 import * as SuperscriptExt from "@tiptap/extension-superscript";
 import * as SubscriptExt from "@tiptap/extension-subscript";
 import * as TableExt from "@tiptap/extension-table";
@@ -113,7 +113,6 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     const Link = pick(LinkExt, 'Link');
     const TaskList = pick(TaskListExt, 'TaskList');
     const TaskItem = pick(TaskItemExt, 'TaskItem');
-    const Image = pick(ImageExt, 'Image');
     const Superscript = pick(SuperscriptExt, 'Superscript');
     const Subscript = pick(SubscriptExt, 'Subscript');
     const Table = pick(TableExt, 'Table');
@@ -131,32 +130,8 @@ const Editor = forwardRef(({ content, onContentChange }, ref) => {
     ];
     if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
     if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
-    if (Image) {
-      exts.push(Image.configure({
-        inline: true,
-        allowBase64: true,
-        HTMLAttributes: {
-          class: 'editor-image',
-        },
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
-              handler: ({ state, range, match, chain }) => {
-                const alt = match[1];
-                const src = match[2];
-                // Handle both local paths and web URLs
-                const resolvedSrc = src.startsWith('http') ? src : src;
-                chain().deleteRange(range).insertContent({
-                  type: 'image',
-                  attrs: { src: resolvedSrc, alt: alt || '' }
-                }).run();
-              },
-            }),
-          ];
-        },
-      }));
-    }
+    // Use custom LocalImage extension that handles local file paths
+    exts.push(LocalImage);
     // Superscript and subscript with input rules for H^2^O and H~2~O syntax
     if (Superscript) {
       exts.push(Superscript.extend({

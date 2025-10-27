@@ -1,0 +1,273 @@
+@startuml Data Flow Diagram - Lokus
+!theme plain
+
+title Lokus Data Flow Diagram - Document Lifecycle & State Management
+
+' ===== EXTERNAL ENTITIES =====
+actor User as user
+database "File System\nWorkspace" as fs
+database "Tauri Store\n.settings.dat" as store
+database "OS Keychain" as keychain
+cloud "External APIs\n(Gmail, Auth)" as external
+
+' ===== PROCESSES =====
+rectangle "1.0\nUI Layer\n(React Components)" as ui #LightBlue {
+    rectangle "1.1\nWorkspace\nView" as workspace
+    rectangle "1.2\nEditor\nComponent" as editor
+    rectangle "1.3\nFile Tree\nComponent" as filetree
+    rectangle "1.4\nGraph\nView" as graph
+    rectangle "1.5\nCommand\nPalette" as cmd
+}
+
+rectangle "2.0\nState Management\n(Contexts & Hooks)" as state #LightGreen {
+    rectangle "2.1\nReact Context\n(Auth, Plugin, Gmail)" as context
+    rectangle "2.2\nLocal State\n(useState)" as local
+    rectangle "2.3\nPlugin State\nManager" as pluginstate
+    rectangle "2.4\nWorkspace\nManager" as wsmanager
+}
+
+rectangle "3.0\nBusiness Logic\n(Services)" as logic #LightYellow {
+    rectangle "3.1\nEditor\nController" as editorlogic
+    rectangle "3.2\nSearch\nEngine" as search
+    rectangle "3.3\nGraph\nProcessor" as graphproc
+    rectangle "3.4\nPlugin\nManager" as pluginmgr
+}
+
+rectangle "4.0\nIPC Bridge\n(Tauri Commands)" as ipc #LightCoral {
+    rectangle "4.1\nCommand\nDispatcher" as dispatcher
+    rectangle "4.2\nEvent\nEmitter" as events
+}
+
+rectangle "5.0\nBackend Services\n(Rust)" as backend #LightSalmon {
+    rectangle "5.1\nFile\nHandler" as filehandler
+    rectangle "5.2\nSearch\nEngine (Rust)" as searchrust
+    rectangle "5.3\nAuth\nService" as authrust
+    rectangle "5.4\nPlugin\nLoader" as pluginrust
+}
+
+' ===== DATA STORES =====
+database "D1: In-Memory\nEditor State" as d1
+database "D2: React\nContext State" as d2
+database "D3: Plugin\nState Cache" as d3
+database "D4: Graph\nData Cache" as d4
+
+' ===== DATA FLOWS =====
+
+' User interactions
+user --> workspace : 1. User Actions\n(Click, Type, Command)
+user --> editor : 2. Edit Content
+user --> filetree : 3. File Operations
+user --> graph : 4. Navigate Graph
+user --> cmd : 5. Execute Commands
+
+' UI to State
+workspace --> context : 6. Update Context
+editor --> local : 7. Update Local State
+editor --> d1 : 8. Update Editor State
+filetree --> wsmanager : 9. Workspace Changes
+graph --> graphproc : 10. Graph Interactions
+
+' State Management Flows
+context --> d2 : 11. Store in Context
+local --> editor : 12. Trigger Re-render
+pluginstate --> d3 : 13. Cache Plugin State
+wsmanager --> d2 : 14. Update Workspace State
+
+' Business Logic
+editorlogic --> d1 : 15. Read Editor State
+editorlogic --> dispatcher : 16. Save Command
+search --> searchrust : 17. Deep Search
+graphproc --> d4 : 18. Cache Graph
+pluginmgr --> pluginstate : 19. Sync Plugin State
+
+' IPC Layer
+dispatcher --> backend : 20. Invoke Commands\n(395+ commands)
+backend --> events : 21. Emit Events
+events --> context : 22. Update State
+events --> workspace : 23. Refresh UI
+
+' Backend to Data
+filehandler --> fs : 24. Read/Write Files
+filehandler --> store : 25. Persist Settings
+authrust --> keychain : 26. Store Tokens
+pluginrust --> fs : 27. Load Plugins
+
+' Backend to External
+authrust <--> external : 28. OAuth Flow
+logic <--> external : 29. Gmail Sync
+
+' Feedback Loops
+fs --> filehandler : 30. File Changed Event
+store --> context : 31. Load Settings
+keychain --> authrust : 32. Retrieve Tokens
+fs --> pluginrust : 33. Plugin Files
+
+' State Sync Issues (Problem Areas)
+pluginstate ..> pluginrust : 34. Sync State\n(30s interval)\n⚠️ Race Condition
+context ..> store : 35. Debounced Save\n(500ms delay)
+d1 ..> filehandler : 36. Auto-save\n⚠️ Can lose data
+d4 ..> fs : 37. Rebuild Graph\n⚠️ O(n²) complexity
+
+note top of state
+  **STATE MANAGEMENT CHAOS**
+
+  Problem: 5 overlapping state systems:
+  1. React Context (global)
+  2. Local state (component)
+  3. Tauri Store (persistent)
+  4. Plugin State Manager (specialized)
+  5. Editor State (TipTap internal)
+
+  Issues:
+  - Race conditions
+  - Synchronization bugs
+  - State divergence
+  - Performance overhead
+end note
+
+note bottom of ipc
+  **IPC BOTTLENECK**
+
+  - 395+ registered commands
+  - No command batching
+  - Frequent small messages
+  - Serialize/deserialize overhead
+
+  Example: Saving file
+  1. invoke('write_file_content')
+  2. invoke('save_version')
+  3. invoke('update_metadata')
+
+  Should be: invoke('save_file', {content, version, metadata})
+end note
+
+note right of graphproc
+  **GRAPH SCALABILITY ISSUE**
+
+  Process:
+  1. Read all .md files (O(n))
+  2. Parse [[wikilinks]] (O(n))
+  3. Build link graph (O(n²))
+  4. Calculate force layout (O(n²))
+
+  Performance:
+  - 100 notes: Instant
+  - 500 notes: 5-10 seconds
+  - 1000 notes: 30+ seconds
+  - 5000 notes: Minutes (unusable)
+
+  Fix: Incremental updates, spatial indexing
+end note
+
+note left of searchrust
+  **SEARCH PERFORMANCE**
+
+  Current: O(n) linear scan
+  1. WalkDir entire workspace
+  2. Read each file
+  3. Regex match on content
+  4. No indexing
+
+  1000 notes = 1-2 seconds
+  5000 notes = 10-30 seconds
+
+  Solution: SQLite FTS5 or Tantivy index
+end note
+
+note bottom of fs
+  **FILE-BASED STORAGE**
+
+  Pros:
+  - Human-readable
+  - Git-friendly
+  - No vendor lock-in
+  - Easy backup
+
+  Cons:
+  - No indexing (slow search)
+  - No transactions (data loss risk)
+  - No referential integrity
+  - Scales poorly (>5K notes)
+end note
+
+' ===== LEGEND =====
+legend right
+  **Data Flow Types:**
+  ─── Direct data flow
+  ··· Async/delayed flow (potential issues)
+
+  **Color Coding:**
+  |<#LightBlue>| UI Layer |
+  |<#LightGreen>| State Management |
+  |<#LightYellow>| Business Logic |
+  |<#LightCoral>| IPC Bridge |
+  |<#LightSalmon>| Backend Services |
+
+  **Key Performance Issues:**
+  1. State synchronization (30s polling)
+  2. No batched IPC commands
+  3. Graph O(n²) complexity
+  4. Search O(n) file scanning
+  5. No database indexing
+end legend
+
+' ===== CRITICAL PATHS =====
+note as N1
+  **CRITICAL PATH: Document Save**
+
+  User types → Editor state → Debounced save (500ms)
+    → IPC: write_file_content
+    → Rust: File I/O
+    → IPC: emit file-changed event
+    → React: Update file tree
+    → Graph: Rebuild links (if wikilinks changed)
+
+  **Issues:**
+  - Debounce can lose data if app crashes
+  - Graph rebuild on every save (O(n²))
+  - No optimistic UI updates
+  - No conflict resolution
+
+  **Time:** ~50-100ms for file save
+           +500ms debounce delay
+           +500-5000ms for graph rebuild (depends on workspace size)
+end note
+
+note as N2
+  **CRITICAL PATH: Search**
+
+  User enters query → Frontend debounce (300ms)
+    → Try client-side (MiniSearch) for quick results
+    → If not sufficient: IPC invoke('search_in_files')
+    → Rust: WalkDir + regex match
+    → Return results (can take seconds)
+    → Display in UI
+
+  **Bottleneck:** No pre-built index
+  Every search scans all files from scratch
+
+  **Time:** 50ms (client) to 10,000ms+ (backend full scan)
+end note
+
+note as N3
+  **CRITICAL PATH: Plugin Toggle**
+
+  User clicks toggle → PluginStateManager.togglePlugin()
+    → Acquire sync lock (prevent race condition)
+    → IPC: enable_plugin/disable_plugin
+    → Rust: Update enabled list
+    → Return success
+    → Update local state
+    → Emit plugin_toggled event
+    → Auto-refresh after 100ms (reload from backend)
+
+  **Why so complex?**
+  Fixes critical "enabled: undefined" bug caused by:
+  - Frontend/backend state divergence
+  - Race conditions on rapid toggles
+  - No atomic operations
+
+  **Time:** 100-200ms (with safety measures)
+end note
+
+@enduml

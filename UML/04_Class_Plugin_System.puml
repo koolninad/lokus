@@ -1,0 +1,380 @@
+@startuml Plugin System - Class Diagram
+!theme plain
+skinparam classAttributeIconSize 0
+
+title Lokus Plugin System - Class Diagram
+
+package "Plugin Management" {
+    class PluginManager {
+        - plugins: Map<string, Plugin>
+        - registry: Map<string, PluginMetadata>
+        - loadedPlugins: Set<string>
+        - activePlugins: Set<string>
+        - dependencies: Map<string, Set<string>>
+        - dependents: Map<string, Set<string>>
+        - loadOrder: string[]
+        - pluginDirs: Set<string>
+        - isInitialized: boolean
+        - tauri: TauriAPIs
+        - pluginAPI: LokusPluginAPI
+        --
+        + initialize(): Promise<void>
+        + setupPluginDirectories(): Promise<void>
+        + discoverPlugins(): Promise<void>
+        + loadPluginManifest(path): Promise<Manifest>
+        + validatePluginManifest(manifest): Promise<boolean>
+        + loadAllPlugins(): Promise<void>
+        + buildDependencyGraph(): void
+        + resolveLoadOrder(): void
+        + loadPlugin(pluginId): Promise<Plugin>
+        + activatePlugin(pluginId): Promise<void>
+        + deactivatePlugin(pluginId): Promise<void>
+        + unloadPlugin(pluginId): Promise<void>
+        + reloadPlugin(pluginId): Promise<void>
+        + getPlugin(id): Plugin
+        + getAllPlugins(): PluginInfo[]
+        + getActivePlugins(): PluginInfo[]
+        + isPluginLoaded(id): boolean
+        + isPluginActive(id): boolean
+        + getStats(): PluginStats
+        + shutdown(): Promise<void>
+        --
+        **ISSUES:**
+        - No resource limits
+        - Weak permission enforcement
+        - No code signing validation
+    }
+
+    class PluginStateManager {
+        - plugins: Map<string, PluginState>
+        - enabledPlugins: Set<string>
+        - syncLock: Map<string, Promise>
+        - pendingUpdates: Map<string, UpdateData>
+        - isInitialized: boolean
+        - autoSave: boolean
+        - syncInterval: number (30s)
+        --
+        + initialize(): Promise<void>
+        + loadFromBackend(): Promise<void>
+        + getPlugins(): Plugin[]
+        + getEnabledPlugins(): Set<string>
+        + getPlugin(id): Plugin
+        + togglePlugin(id, enabled): Promise<Result>
+        + installPlugin(id, data): Promise<boolean>
+        + uninstallPlugin(id): Promise<boolean>
+        + updatePluginSettings(id, settings): Promise<boolean>
+        + refresh(): Promise<void>
+        + setupAutoSync(): void
+        + getStats(): Stats
+        + shutdown(): Promise<void>
+        --
+        **PURPOSE:**
+        Fixes critical "enabled: undefined" bug
+        Prevents race conditions with locking
+        Ensures state consistency
+    }
+
+    class PluginState {
+        - data: PluginData
+        - lastModified: number
+        --
+        + getData(): PluginData
+        + setEnabled(enabled: boolean): void
+        + updateSettings(settings): void
+        + getLastModified(): number
+        --
+        **GUARANTEES:**
+        enabled is always boolean (never undefined)
+        Atomic state updates
+    }
+
+    class LokusPluginAPI {
+        - managers: APIManagers
+        - currentPluginId: string
+        - registeredCommands: Map<string, Command>
+        - registeredPanels: Map<string, Panel>
+        --
+        **Exposed APIs:**
+        + EditorAPI
+        + FileSystemAPI
+        + WorkspaceAPI
+        + CommandAPI
+        + UIAPI
+        + ConfigAPI
+        + EventAPI
+        + DataAPI
+        --
+        + setPluginContext(pluginId, plugin): void
+        + cleanup(pluginId): Promise<void>
+        --
+        **SECURITY ISSUE:**
+        No permission enforcement!
+        Manifest permissions ignored
+    }
+
+    class EventEmitter {
+        - events: Map<string, Function[]>
+        --
+        + on(event, handler): void
+        + off(event, handler): void
+        + emit(event, data): void
+        + once(event, handler): void
+        + removeAllListeners(): void
+    }
+}
+
+package "Plugin APIs" {
+    interface EditorAPI {
+        + addSlashCommand(cmd): Promise<void>
+        + addExtension(ext): void
+        + getContent(): string
+        + insertText(text, position): void
+        + replaceSelection(text): void
+        + getSelection(): Selection
+    }
+
+    interface FileSystemAPI {
+        + readFile(path): Promise<string>
+        + writeFile(path, content): Promise<void>
+        + listFiles(dir): Promise<FileInfo[]>
+        + exists(path): Promise<boolean>
+        + delete(path): Promise<void>
+    }
+
+    interface WorkspaceAPI {
+        + getCurrentWorkspace(): string
+        + getAllNotes(): Promise<Note[]>
+        + getNoteByPath(path): Promise<Note>
+        + createNote(title, content): Promise<Note>
+        + searchNotes(query): Promise<SearchResult[]>
+    }
+
+    interface CommandAPI {
+        + registerCommand(id, handler): void
+        + executeCommand(id): Promise<any>
+        + unregisterCommand(id): void
+        + getCommands(): Command[]
+    }
+
+    interface UIAPI {
+        + addPanel(panel): void
+        + removePanel(id): void
+        + showNotification(message, type): void
+        + showDialog(config): Promise<any>
+        + addStatusItem(item): void
+    }
+
+    interface ConfigAPI {
+        + get(key): any
+        + set(key, value): Promise<void>
+        + getAll(): object
+        + reset(): Promise<void>
+    }
+
+    interface EventAPI {
+        + on(event, handler): void
+        + emit(event, data): void
+        + off(event, handler): void
+    }
+
+    interface DataAPI {
+        + getBases(): Promise<Base[]>
+        + queryBase(name, query): Promise<Record[]>
+        + createRecord(base, data): Promise<Record>
+        + updateRecord(id, data): Promise<Record>
+    }
+}
+
+package "Plugin Structure" {
+    class Plugin {
+        + id: string
+        + manifest: Manifest
+        + path: string
+        --
+        + activate(context: PluginContext): Promise<void>
+        + deactivate(): Promise<void>
+        + cleanup(): Promise<void>
+    }
+
+    class Manifest {
+        + id: string
+        + name: string
+        + version: string
+        + description: string
+        + author: string
+        + main: string
+        + lokusVersion: string
+        + permissions: Permission[]
+        + dependencies: object
+        + keywords: string[]
+        + repository: string
+        + homepage: string
+        + license: string
+        + type: PluginType
+        + ui: UIConfig
+    }
+
+    enum Permission {
+        editor
+        ui
+        filesystem
+        network
+        clipboard
+        notifications
+        commands
+        data
+    }
+
+    enum PluginType {
+        editor
+        panel
+        data
+        theme
+        integration
+    }
+
+    class PluginContext {
+        + pluginId: string
+        + api: LokusPluginAPI
+        + workspacePath: string
+        + subscriptions: Disposable[]
+        --
+        + addDisposable(disposable): void
+    }
+}
+
+package "Rust Backend" {
+    class PluginsRust <<Rust Module>> {
+        --
+        + list_plugins(): Vec<PluginInfo>
+        + install_plugin(url): Result
+        + uninstall_plugin(id): Result
+        + get_plugin_info(id): Result<PluginInfo>
+        + validate_plugin_manifest(path): Result<Manifest>
+        + get_plugins_directory(): String
+        + enable_plugin(name): Result
+        + disable_plugin(name): Result
+        + get_enabled_plugins(): Vec<String>
+        + set_plugin_permission(id, perm): Result
+        + get_plugin_permissions(id): Permissions
+        + set_plugin_setting(id, key, val): Result
+        + get_plugin_setting(id, key): Value
+        + read_plugin_file(id, file): String
+    }
+}
+
+' ===== RELATIONSHIPS =====
+
+PluginManager *-- PluginState : manages >
+PluginManager *-- LokusPluginAPI : provides >
+PluginManager --> EventEmitter : extends
+PluginStateManager *-- PluginState : stores >
+PluginStateManager --> EventEmitter : extends
+
+PluginManager --> PluginsRust : invoke() >
+PluginStateManager --> PluginsRust : sync state >
+
+Plugin --> Manifest : has >
+Plugin --> PluginContext : receives >
+PluginContext --> LokusPluginAPI : provides >
+
+LokusPluginAPI ..|> EditorAPI : implements
+LokusPluginAPI ..|> FileSystemAPI : implements
+LokusPluginAPI ..|> WorkspaceAPI : implements
+LokusPluginAPI ..|> CommandAPI : implements
+LokusPluginAPI ..|> UIAPI : implements
+LokusPluginAPI ..|> ConfigAPI : implements
+LokusPluginAPI ..|> EventAPI : implements
+LokusPluginAPI ..|> DataAPI : implements
+
+Manifest *-- Permission
+Manifest *-- PluginType
+
+' Plugin lifecycle
+PluginManager --> Plugin : loads/activates >
+Plugin ..> EditorAPI : uses
+Plugin ..> FileSystemAPI : uses
+Plugin ..> WorkspaceAPI : uses
+Plugin ..> CommandAPI : uses
+
+note top of PluginManager
+  **Topological Sort for Dependencies**
+  - Builds dependency graph
+  - Resolves circular dependencies
+  - Loads in correct order
+  - Deactivates dependents first
+end note
+
+note right of PluginStateManager
+  **Critical Bug Fix**
+  Introduced to solve:
+  1. "enabled: undefined" bug
+  2. Race conditions in state updates
+  3. Frontend-backend state divergence
+  4. Manual locking prevents concurrent updates
+  5. Auto-sync every 30 seconds
+end note
+
+note bottom of LokusPluginAPI
+  **SECURITY VULNERABILITY**
+
+  Problem:
+  - Permissions in manifest not enforced
+  - Plugin can access any API regardless
+  - No resource limits (CPU, memory, disk I/O)
+  - No code signing verification
+
+  Example:
+  Plugin manifest: { permissions: ["editor"] }
+  But can still call: api.filesystem.readFile("/etc/passwd")
+
+  **FIX REQUIRED:**
+  - Capability-based security
+  - Strict permission checking
+  - Resource quotas
+  - Code signing
+end note
+
+note bottom of PluginsRust
+  **Backend Responsibilities:**
+  - File system access to plugin directories
+  - Manifest validation
+  - Enabled plugin persistence
+  - Plugin installation/uninstallation
+  - Permission storage (not enforced!)
+  - Settings storage
+end note
+
+note left of Plugin
+  **Plugin Lifecycle:**
+  1. DISCOVERED: Found in directory
+  2. VALIDATED: Manifest checked
+  3. LOADED: Class instantiated
+  4. ACTIVATED: activate() called
+  5. ACTIVE: Running, listening to events
+  6. DEACTIVATED: deactivate() called
+  7. UNLOADED: Cleanup, memory freed
+end note
+
+note as N1
+  **Dependency Resolution Example:**
+
+  Plugins:
+  - A depends on: [B, C]
+  - B depends on: [C]
+  - C depends on: []
+
+  Dependency Graph:
+  A → B → C
+  A → C
+
+  Load Order (Topological Sort):
+  1. C (no dependencies)
+  2. B (depends on C, already loaded)
+  3. A (depends on B and C, both loaded)
+
+  Circular Dependency Detection:
+  If A → B → C → A: Throws Error
+end note
+
+@enduml

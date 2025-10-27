@@ -107,6 +107,15 @@ pub fn read_file_content(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
+    println!("[Backend] read_binary_file called: {}", path);
+    fs::read(path).map_err(|e| {
+        println!("[Backend] Error reading binary file: {}", e);
+        e.to_string()
+    })
+}
+
+#[tauri::command]
 pub fn write_file_content(path: String, content: String) -> Result<(), String> {
     // Write the file first
     fs::write(&path, &content).map_err(|e| e.to_string())?;
@@ -254,4 +263,60 @@ pub fn reveal_in_finder(path: String) -> Result<(), String> {
 pub fn open_terminal(path: String) -> Result<(), String> {
     // Use platform abstraction for better error handling and consistency
     super::platform_files::platform_open_terminal(path)
+}
+
+#[tauri::command]
+pub fn save_image_to_workspace(
+    workspace_path: String,
+    file_name: String,
+    image_data: Vec<u8>,
+) -> Result<String, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    println!("[Backend] save_image_to_workspace called");
+    println!("[Backend] Workspace: {}", workspace_path);
+    println!("[Backend] File name: {}", file_name);
+    println!("[Backend] Image size: {} bytes", image_data.len());
+
+    let workspace = Path::new(&workspace_path);
+
+    // Create .assets folder if it doesn't exist
+    let assets_folder = workspace.join(".assets");
+    if !assets_folder.exists() {
+        println!("[Backend] Creating .assets folder");
+        fs::create_dir_all(&assets_folder).map_err(|e| {
+            format!("Failed to create .assets folder: {}", e)
+        })?;
+    }
+
+    // Generate unique filename with timestamp to avoid collisions
+    let extension = Path::new(&file_name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("png");
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    let base_name = Path::new(&file_name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("image");
+
+    let unique_name = format!("{}_{}.{}", base_name, timestamp, extension);
+    let image_path = assets_folder.join(&unique_name);
+
+    // Write the image data
+    println!("[Backend] Writing image to: {:?}", image_path);
+    fs::write(&image_path, image_data).map_err(|e| {
+        format!("Failed to write image file: {}", e)
+    })?;
+
+    // Return relative path for markdown
+    let relative_path = format!(".assets/{}", unique_name);
+    println!("[Backend] Image saved successfully: {}", relative_path);
+
+    Ok(relative_path)
 }

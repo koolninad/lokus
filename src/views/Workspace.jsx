@@ -40,6 +40,8 @@ import PluginSettings from "./PluginSettings.jsx";
 import PluginDetail from "./PluginDetail.jsx";
 import { canvasManager } from "../core/canvas/manager.js";
 import TemplatePicker from "../components/TemplatePicker.jsx";
+import ImagePicker from "../components/ImagePicker.jsx";
+import ImageViewer from "../components/ImageViewer.jsx";
 import { getMarkdownCompiler } from "../core/markdown/compiler.js";
 import CreateTemplate from "../components/CreateTemplate.jsx";
 import { PanelManager, PanelRegion, usePanelManager } from "../plugins/ui/PanelManager.jsx";
@@ -818,6 +820,8 @@ function WorkspaceWithScope({ path }) {
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templatePickerData, setTemplatePickerData] = useState(null);
   const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [imagePickerData, setImagePickerData] = useState(null);
   const [createTemplateContent, setCreateTemplateContent] = useState('');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showKanban, setShowKanban] = useState(false);
@@ -1219,7 +1223,7 @@ function WorkspaceWithScope({ path }) {
     if (file.path && file.lineNumber !== undefined) {
       const filePath = file.path;
       const fileName = getFilename(filePath);
-      
+
       setOpenTabs(prevTabs => {
         const newTabs = prevTabs.filter(t => t.path !== filePath);
         newTabs.unshift({ path: filePath, name: fileName });
@@ -1229,7 +1233,7 @@ function WorkspaceWithScope({ path }) {
         return newTabs;
       });
       setActiveFile(filePath);
-      
+
       // Jump to line after editor loads
       setTimeout(() => {
         if (editorRef.current && file.lineNumber) {
@@ -1246,7 +1250,7 @@ function WorkspaceWithScope({ path }) {
       }, 100);
       return;
     }
-    
+
     // Handle regular file format
     if (file.is_directory) return;
 
@@ -2436,7 +2440,7 @@ function WorkspaceWithScope({ path }) {
 
   useEffect(() => {
     let isTauri = false; try { isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI_METADATA__); } catch {}
-    const addDom = (name, fn) => { const h = () => fn(); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
+    const addDom = (name, fn) => { const h = (event) => fn(event); window.addEventListener(name, h); return () => window.removeEventListener(name, h); };
     const unlistenSave = isTauri ? listen("lokus:save-file", handleSave) : Promise.resolve(addDom('lokus:save-file', handleSave));
     const unlistenClose = isTauri ? listen("lokus:close-tab", () => {
       if (stateRef.current.activeFile) {
@@ -2487,6 +2491,13 @@ function WorkspaceWithScope({ path }) {
       setShowTemplatePicker(true);
     };
     const unlistenTemplatePicker = Promise.resolve(addDom('open-template-picker', handleTemplatePicker));
+
+    // Image picker event listener
+    const handleImagePicker = (event) => {
+      setImagePickerData(event.detail);
+      setShowImagePicker(true);
+    };
+    const unlistenImagePicker = Promise.resolve(addDom('open-image-picker', handleImagePicker));
 
     // Menu event handlers for editor formatting
     const handleEditorFormat = (formatType) => {
@@ -2778,7 +2789,8 @@ function WorkspaceWithScope({ path }) {
       unlistenResetPaneSize.then(f => { if (typeof f === 'function') f(); });
       unlistenToggleSyncScrolling.then(f => { if (typeof f === 'function') f(); });
       unlistenTemplatePicker.then(f => { if (typeof f === 'function') f(); });
-      
+      unlistenImagePicker.then(f => { if (typeof f === 'function') f(); });
+
       // Cleanup menu event listeners
       unlistenExportPdf.then(f => { if (typeof f === 'function') f(); });
       unlistenPrint.then(f => { if (typeof f === 'function') f(); });
@@ -3434,6 +3446,13 @@ function WorkspaceWithScope({ path }) {
                 onFileOpen={handleFileOpen}
               />
             </div>
+          ) : activeFile && (activeFile.endsWith('.png') || activeFile.endsWith('.jpg') || activeFile.endsWith('.jpeg') || activeFile.endsWith('.gif') || activeFile.endsWith('.webp') || activeFile.endsWith('.svg') || activeFile.endsWith('.bmp')) ? (
+            <div className="flex-1 overflow-hidden">
+              <ImageViewer
+                imagePath={activeFile}
+                imageName={getFilename(activeFile)}
+              />
+            </div>
           ) : activeFile === '__graph__' ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
               <ProfessionalGraphView
@@ -3963,7 +3982,24 @@ function WorkspaceWithScope({ path }) {
           editorState={templatePickerData.editorState}
         />
       )}
-      
+
+      {showImagePicker && imagePickerData && (
+        <ImagePicker
+          open={showImagePicker}
+          onClose={() => {
+            setShowImagePicker(false);
+            setImagePickerData(null);
+          }}
+          onInsert={(imagePath) => {
+            if (imagePickerData.onInsert) {
+              imagePickerData.onInsert(imagePath);
+            }
+            setShowImagePicker(false);
+            setImagePickerData(null);
+          }}
+        />
+      )}
+
       <FullTextSearchPanel
         isOpen={showGlobalSearch}
         onClose={() => setShowGlobalSearch(false)}

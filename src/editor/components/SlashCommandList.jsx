@@ -31,8 +31,19 @@ const SlashCommandList = forwardRef((props, ref) => {
 
   const selectItem = (itemTitle) => {
     const item = allItems.find(i => i.title === itemTitle);
-    if (item) {
-      props.command(item);
+    console.log('[SlashCommand] Selecting item:', itemTitle, 'found:', !!item);
+
+    if (item && item.command) {
+      try {
+        console.log('[SlashCommand] Calling props.command with item:', itemTitle);
+        console.log('[SlashCommand] Props has command:', !!props.command);
+        props.command(item);
+        console.log('[SlashCommand] props.command called successfully');
+      } catch (error) {
+        console.error('[SlashCommand] Error calling props.command:', itemTitle, error);
+      }
+    } else {
+      console.warn('[SlashCommand] No command found for:', itemTitle);
     }
   };
 

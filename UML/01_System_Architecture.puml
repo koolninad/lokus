@@ -1,0 +1,157 @@
+@startuml System Architecture - Lokus
+!define RECTANGLE_STYLE fill:#E3F2FD,stroke:#2196F3,stroke-width:2
+!define COMPONENT_STYLE fill:#FFF3E0,stroke:#FF9800,stroke-width:2
+!define DATABASE_STYLE fill:#E8F5E9,stroke:#4CAF50,stroke-width:2
+
+title Lokus System Architecture - High Level View
+
+package "Frontend Layer (React 19)" as Frontend {
+    rectangle "<<View>>\nUI Components" as UI #FFF3E0 {
+        component [Workspace View\n(171KB)] as WorkspaceView
+        component [Preferences View\n(143KB)] as PrefsView
+        component [Launcher View] as LauncherView
+        component [Editor (TipTap)\n24 Extensions] as Editor
+        component [Graph View (3D)\nThree.js + Sigma] as GraphView
+        component [Canvas View\nTLDraw] as CanvasView
+        component [Kanban Board] as KanbanView
+    }
+
+    rectangle "<<Business Logic>>\nState Management" as Logic #E1F5FE {
+        component [React Contexts\n4+ Contexts] as Contexts
+        component [Custom Hooks\n15+ Hooks] as Hooks
+        component [Plugin Manager] as PluginMgr
+        component [Plugin State Manager] as PluginState
+        component [Workspace Manager] as WorkspaceMgr
+    }
+
+    rectangle "<<Services>>\nIntegrations" as Services #F3E5F5 {
+        component [Gmail Service] as Gmail
+        component [Platform Service] as Platform
+        component [MCP Client] as MCPClient
+    }
+}
+
+package "IPC Bridge (Tauri)" as IPC {
+    rectangle "<<Communication>>\nTauri Commands & Events" as TauriIPC #FFF9C4 {
+        component [395+ Commands] as Commands
+        component [Event Bus] as Events
+        component [Async Runtime] as AsyncRuntime
+    }
+}
+
+package "Backend Layer (Rust)" as Backend {
+    rectangle "<<Core Services>>" as CoreServices #FFEBEE {
+        component [Auth Service\nOAuth2 + PKCE] as Auth
+        component [File Handler\nWorkspace Operations] as Files
+        component [Search Engine\nRegex + WalkDir] as Search
+        component [Plugin Loader\nDynamic Import] as Plugins
+        component [Task Manager] as Tasks
+        component [Kanban Manager] as Kanban
+        component [Theme Manager] as Theme
+    }
+
+    rectangle "<<External Integrations>>" as ExtServices #E0F2F1 {
+        component [OAuth Server\nLocalhost:3333-3400] as OAuthServer
+        component [API Server\nPort 3333] as APIServer
+        component [MCP Server\nStdio Transport] as MCPServer
+        component [Gmail Connection\nSMTP/IMAP] as GmailConn
+    }
+
+    rectangle "<<Security>>" as Security #FCE4EC {
+        component [Secure Storage\nAES-GCM] as SecureStore
+        component [Session Manager] as SessionMgr
+    }
+}
+
+package "Data Layer" as DataLayer {
+    database "<<File System>>\nLocal Workspace" as FS {
+        folder "workspace/" {
+            artifact "note1.md"
+            artifact "note2.md"
+            folder ".lokus/" {
+                artifact ".tasks.db"
+                artifact ".canvas.db"
+                artifact ".graph.cache"
+            }
+        }
+    }
+
+    database "<<Persistent Store>>\nTauri Store" as Store {
+        artifact ".settings.dat"
+        artifact "session_state_*"
+    }
+
+    database "<<System>>\nOS Keychain" as Keychain {
+        artifact "Encrypted Tokens"
+        artifact "User Credentials"
+    }
+}
+
+' ===== RELATIONSHIPS =====
+
+' Frontend to IPC
+UI --> Commands : invoke()
+Logic --> Commands : invoke()
+Services --> Commands : invoke()
+Commands --> Logic : events
+Events --> UI : update
+
+' IPC to Backend
+Commands --> CoreServices : dispatch
+CoreServices --> Commands : results
+CoreServices --> Events : emit
+
+' Backend to Data
+Files --> FS : read/write
+Auth --> SecureStore : encrypt/decrypt
+SecureStore --> Keychain : store/retrieve
+Tasks --> FS : persist
+Kanban --> FS : persist
+
+' External Services
+Auth --> OAuthServer : authenticate
+WorkspaceMgr --> APIServer : workspace info
+MCPClient --> MCPServer : AI integration
+Gmail --> GmailConn : email sync
+
+' Plugin System
+PluginMgr --> Plugins : load
+Plugins --> FS : plugin files
+PluginState --> Store : persist state
+
+' Graph relationships
+GraphView --> Files : read notes
+GraphView --> WorkspaceMgr : get links
+Editor --> Files : save content
+Search --> FS : index files
+
+note right of Frontend
+  React 19 with hooks
+  TailwindCSS styling
+  Vite build system
+  ~25,000 lines
+end note
+
+note right of Backend
+  Rust with Tokio async
+  Tauri 2.0 framework
+  ~19,000 lines
+  395+ IPC commands
+end note
+
+note bottom of DataLayer
+  Local-first architecture
+  No cloud by default
+  File-based storage
+  JSON + Markdown
+end note
+
+legend right
+  |<#E3F2FD>| Frontend Components |
+  |<#FFEBEE>| Backend Services |
+  |<#E8F5E9>| Data Storage |
+  |<#FFF9C4>| IPC Layer |
+  |<#FCE4EC>| Security |
+endlegend
+
+@enduml

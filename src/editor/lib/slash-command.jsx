@@ -88,22 +88,26 @@ function openTemplatePicker({ editor, range }) {
 }
 
 function openFileLinkPicker({ editor, range }) {
-  
+  console.log('[FileLink] openFileLinkPicker called');
+
   try {
     // Get file index for suggestions
     const getIndex = () => {
       const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
       return Array.isArray(list) ? list : []
     };
-    
+
     const files = getIndex();
-    
+    console.log('[FileLink] Got files:', files.length);
+
     if (files.length === 0) {
+      console.log('[FileLink] No files, inserting empty wiki link [[]]');
       // No files available, just insert empty wiki link
       editor.chain().focus().deleteRange(range).insertContent('[[]]').run();
       return;
     }
-    
+
+    console.log('[FileLink] Creating file picker UI...');
     // Create file picker UI
     createFilePicker(files, (selectedFile) => {
       if (selectedFile) {
@@ -154,20 +158,26 @@ Subject: ${fileName}
 
 // Kanban helper functions
 async function getKanbanBoards() {
+  console.log('[Kanban] getKanbanBoards called, isTauri:', !!(typeof window !== 'undefined' && window.__TAURI__));
   try {
     if (typeof window !== 'undefined' && window.__TAURI__) {
       const { invoke } = window.__TAURI__.tauri;
+      console.log('[Kanban] Invoking list_kanban_boards...');
       const boards = await invoke('list_kanban_boards');
+      console.log('[Kanban] list_kanban_boards returned:', boards);
       return boards || [];
     }
   } catch (error) {
-    console.error('Failed to get kanban boards:', error);
+    console.error('[Kanban] Failed to get kanban boards:', error);
   }
+  console.log('[Kanban] Returning empty array');
   return [];
 }
 
 function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
+  console.log('[Kanban] createKanbanBoardPicker called', { editor: !!editor, range, onInsertTask });
   getKanbanBoards().then(boards => {
+    console.log('[Kanban] Got boards:', boards.length);
     if (boards.length === 0) {
       // No boards, prompt to create one
       const boardName = window.prompt('No kanban boards found. Create a new board:');
@@ -523,14 +533,20 @@ function createFilePicker(files, onSelect) {
 }
 
 function openTableSizePicker({ editor, range }) {
+  console.log('[Table] openTableSizePicker called, lastClientRect:', !!lastClientRect);
   // If table not ready, wait briefly and insert default; if we can't position a picker, also insert default.
   if (!lastClientRect) {
+    console.log('[Table] No lastClientRect, inserting default 3x3 table');
     try {
       const html = buildTableHTML(3, 3, true);
       editor.chain().focus().deleteRange(range).insertContent(html).run();
-    } catch {}
+      console.log('[Table] Default table inserted');
+    } catch (err) {
+      console.error('[Table] Error inserting default table:', err);
+    }
     return;
   }
+  console.log('[Table] Creating table size picker UI...');
 
   const MAX_ROWS = 6;
   const MAX_COLS = 8;
@@ -676,16 +692,27 @@ const commandItems = [
       },
       {
         title: "Image",
-        description: "Insert an image by URL.",
+        description: "Insert image with drag-drop or URL.",
         icon: <ImageIcon size={18} />,
         command: ({ editor, range }) => {
-          const url = window.prompt('Image URL');
-          if (!url) return;
-          if (editor?.commands?.setImage) {
-            editor.chain().focus().deleteRange(range).setImage({ src: url }).run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent(`<img src="${url}" alt="" />`).run();
-          }
+          console.log('[Image] Opening image picker modal');
+          // Dispatch custom event to open image picker modal
+          window.dispatchEvent(new CustomEvent('open-image-picker', {
+            detail: {
+              editor,
+              range,
+              onInsert: (imagePath) => {
+                console.log('[Image] Inserting image node:', imagePath);
+                // Insert image node directly (not markdown text)
+                // InputRules only work when typing, not with programmatic insertContent
+                editor.chain().focus().deleteRange(range).insertContent({
+                  type: 'image',
+                  attrs: { src: imagePath, alt: '' }
+                }).run();
+              }
+            }
+          }));
+          console.log('[Image] Image picker event dispatched');
         },
       },
       {
@@ -733,7 +760,9 @@ const commandItems = [
         description: "Create a simple bullet list.",
         icon: <List size={18} />,
         command: ({ editor, range }) => {
+          console.log('[BulletList] Toggling bullet list');
           editor.chain().focus().deleteRange(range).toggleBulletList().run();
+          console.log('[BulletList] Bullet list toggled');
         },
       },
       {
@@ -849,13 +878,19 @@ const commandItems = [
         description: "Insert $x^2$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
+          console.log('[Math] Prompting for inline LaTeX formula...');
           const src = window.prompt('Enter LaTeX formula:', 'E = mc^2')
+          console.log('[Math] Got formula:', src);
           if (src != null && src.trim()) {
+            console.log('[Math] Inserting inline math, has setMathInline:', !!editor?.commands?.setMathInline);
             if (editor?.commands?.setMathInline) {
               editor.chain().focus().deleteRange(range).setMathInline(src.trim()).run()
             } else {
               editor.chain().focus().deleteRange(range).insertContent(`$${src.trim()}$`).run()
             }
+            console.log('[Math] Inline math inserted');
+          } else {
+            console.log('[Math] No formula provided or empty');
           }
         },
       },

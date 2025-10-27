@@ -1,0 +1,319 @@
+@startuml Deployment Diagram - Lokus
+!theme plain
+
+title Lokus Deployment Architecture - Cross-Platform Desktop App
+
+' ===== NODES =====
+
+node "User's Desktop (macOS/Windows/Linux)" as desktop {
+
+    artifact "Lokus.app\n(macOS Universal)\n50-70 MB" as mac_app
+    artifact "Lokus.exe\n(Windows)\n60-80 MB" as win_app
+    artifact "Lokus.AppImage\n(Linux)\n70-90 MB" as linux_app
+
+    component "Tauri Runtime\n(WebView2/WebKit)" as webview {
+
+        package "Frontend Bundle" {
+            component "React 19 App\n(Vite build)\n~5 MB" as react
+            component "TipTap Editor\n+ 24 Extensions" as tiptap
+            component "Three.js\n(3D Graph)" as threejs
+            component "TLDraw\n(Canvas)" as tldraw
+            component "CSS/Assets\n~2 MB" as assets
+        }
+
+        package "Rust Backend\n(Compiled Binary)\n~40 MB" as rust {
+            component "Main Process\n(main.rs)" as main
+            component "File Handlers\n(I/O Operations)" as files
+            component "Search Engine\n(Regex + WalkDir)" as search
+            component "Auth Service\n(OAuth2)" as auth
+            component "Plugin System\n(Dynamic Loading)" as plugins
+        }
+
+        package "Background Services" {
+            component "OAuth Server\nlocalhost:3333-3400" as oauth_server
+            component "API Server\nPort 3333" as api_server
+            component "MCP Server\n(Stdio)" as mcp_server
+        }
+    }
+
+    database "Local Storage" {
+        folder "Workspace\n~/Documents/Lokus" as workspace {
+            artifact "*.md files\n(Notes)"
+            artifact ".lokus/\n(Metadata)"
+            artifact ".tasks.db\n(JSON)"
+            artifact ".canvas.db"
+            artifact ".graph.cache"
+        }
+
+        folder "App Data\n~/.lokus" as appdata {
+            artifact ".settings.dat\n(Tauri Store)"
+            artifact "plugins/\n(User Plugins)"
+            artifact "themes/\n(Custom Themes)"
+            artifact "last-workspace.json"
+        }
+
+        database "OS Keychain" as keychain {
+            artifact "Encrypted Tokens\n(AES-GCM)"
+            artifact "User Credentials"
+            artifact "Gmail Credentials"
+        }
+    }
+}
+
+cloud "External Services" as external {
+    component "Auth Provider\nlokusmd.com/auth" as auth_provider
+    component "Gmail API\ngmail.googleapis.com" as gmail
+    component "GitHub\n(Plugin Marketplace)" as github
+}
+
+cloud "AI Assistant\n(Optional)" as ai {
+    component "Desktop AI App" as ai_desktop
+    component "MCP Client" as mcp_client
+}
+
+' ===== CONNECTIONS =====
+
+react --> main : IPC Commands\n(395+ commands)
+main --> react : IPC Events
+
+react --> tiptap : Editor API
+react --> threejs : Graph Rendering
+react --> tldraw : Canvas Rendering
+react --> assets : Load Styles
+
+main --> files : File Operations
+main --> search : Search Requests
+main --> auth : Authentication
+main --> plugins : Plugin Management
+
+files --> workspace : Read/Write
+main --> appdata : Settings Storage
+auth --> keychain : Secure Storage
+
+oauth_server --> auth : OAuth Callbacks
+api_server --> files : HTTP API
+mcp_server --> files : AI Integration
+
+auth --> auth_provider : OAuth2 Flow\n(HTTPS)
+gmail --> gmail : Email Sync\n(IMAP/SMTP)
+plugins --> github : Download Plugins\n(HTTPS)
+
+mcp_server <--> mcp_client : Stdio Transport
+mcp_client --> ai_desktop : AI Commands
+
+note right of desktop
+  **Platform Distribution:**
+
+  macOS:
+  - Universal binary (Intel + Apple Silicon)
+  - .dmg installer
+  - Code signed & notarized
+  - Bundle size: 50-70 MB
+
+  Windows:
+  - EXE installer
+  - MSI package (enterprise)
+  - Code signed
+  - WebView2 runtime (auto-install)
+  - Bundle size: 60-80 MB
+
+  Linux:
+  - AppImage (portable)
+  - .deb package (Debian/Ubuntu)
+  - Snap package (optional)
+  - Bundle size: 70-90 MB
+
+  **Why Tauri vs Electron:**
+  - 70% smaller bundle
+  - 50% lower memory usage
+  - Native webview (no Chromium)
+  - Rust security & performance
+end note
+
+note left of workspace
+  **Local-First Architecture**
+
+  All data stored locally:
+  - Workspace: User-chosen location
+  - App Data: Standard OS location
+  - Credentials: OS secure storage
+
+  Benefits:
+  ✅ Privacy (no cloud by default)
+  ✅ Offline-first
+  ✅ Fast (no network latency)
+  ✅ User owns data
+  ✅ Git-friendly (plain text)
+
+  Drawbacks:
+  ⚠️ No sync (yet)
+  ⚠️ Single device
+  ⚠️ No collaboration
+  ⚠️ Manual backup
+end note
+
+note bottom of oauth_server
+  **Background Services**
+
+  All run in main process:
+  - OAuth Server: One-time use for auth callbacks
+  - API Server: Persistent, for MCP integration
+  - MCP Server: Stdio-based, launched on demand
+
+  **Port Conflicts:**
+  OAuth tries 3333-3400 sequentially
+  API uses fixed port 3333
+  Potential conflict with other apps
+end note
+
+note right of external
+  **External Dependencies**
+
+  Required:
+  - Auth Provider (for user accounts)
+  - OS Keychain (for secure storage)
+
+  Optional:
+  - Gmail (for email integration)
+  - GitHub (for plugin downloads)
+  - AI Assistant (for MCP features)
+
+  **Network Required For:**
+  - Initial authentication
+  - Plugin downloads
+  - Gmail sync
+  - AI assistant features
+
+  **Offline Capabilities:**
+  - All core features work
+  - Notes, editing, search, graph
+  - Previously synced Gmail
+  - Installed plugins
+end note
+
+note as N1
+  **Installation Process:**
+
+  1. User downloads installer from website
+  2. OS verifies code signature
+  3. Installer extracts:
+     - Tauri runtime
+     - Frontend bundle (React app)
+     - Backend binary (Rust)
+     - Default themes
+     - Embedded MCP server
+  4. First launch:
+     - Create ~/.lokus directory
+     - Initialize settings
+     - Show launcher (select workspace)
+  5. User selects/creates workspace
+  6. App creates .lokus metadata folder
+  7. Ready to use
+end note
+
+note as N2
+  **Update Process:**
+
+  Currently: Manual (download new version)
+
+  Planned:
+  - Built-in updater (Tauri plugin)
+  - Check for updates on launch
+  - Download in background
+  - Install on restart
+  - Delta updates (save bandwidth)
+
+  **Version Checking:**
+  GET lokusmd.com/api/version/latest
+  Compare with current: 1.3.3
+end note
+
+node "Development Environment" as devenv {
+    artifact "Source Code\n(GitHub)" as source
+    component "Build Pipeline\n(GitHub Actions)" as ci
+
+    source --> ci : Push/PR
+
+    ci --> mac_app : Build macOS
+    ci --> win_app : Build Windows
+    ci --> linux_app : Build Linux
+
+    note right of ci
+      **Build Process:**
+      1. Lint & test (Vitest)
+      2. Build frontend (Vite)
+      3. Compile Rust (cargo)
+      4. Bundle with Tauri CLI
+      5. Sign binaries
+      6. Create installers
+      7. Upload to releases
+
+      **Cross-Platform Building:**
+      - macOS: Native (Universal)
+      - Windows: Native or Docker
+      - Linux: Docker (Ubuntu)
+
+      **Build Time:** 10-15 minutes
+    end note
+}
+
+' ===== RESOURCE USAGE =====
+
+frame "Resource Usage (Typical)" {
+    card "CPU Usage" {
+        label "Idle: <5%"
+        label "Editing: 5-10%"
+        label "Graph Rendering: 20-40%"
+        label "Search: 30-60%"
+    }
+
+    card "Memory Usage" {
+        label "Minimal: 150 MB"
+        label "Typical: 300-500 MB"
+        label "Large Workspace (5K notes): 1 GB+"
+        label "Graph Rendering: +200-400 MB"
+    }
+
+    card "Disk Usage" {
+        label "App Bundle: 50-90 MB"
+        label "App Data: 5-20 MB"
+        label "Workspace: Varies (user data)"
+        label "Plugins: 1-10 MB each"
+    }
+
+    card "Network Usage" {
+        label "Auth: <1 MB (one-time)"
+        label "Gmail Sync: 10-100 MB/day"
+        label "Plugin Download: 1-5 MB each"
+        label "Updates: 50-90 MB"
+    }
+}
+
+' ===== SCALABILITY LIMITS =====
+
+note as N3
+  **Current Scalability Limits:**
+
+  Notes: <5,000 (performance degrades above)
+  Graph Nodes: <500 (smooth 60 FPS)
+  Search Time: Linear with note count
+  Memory: Unbounded (all data in RAM)
+  Plugins: <20 (no limit, but slow startup)
+
+  **Bottlenecks:**
+  1. No database (file-based only)
+  2. No indexing (full scan search)
+  3. Graph O(n²) complexity
+  4. No pagination
+  5. All data loaded eagerly
+
+  **To Scale to 50K+ notes:**
+  - Add SQLite for metadata
+  - Add Tantivy for full-text search
+  - Optimize graph (Barnes-Hut, LOD)
+  - Lazy loading everywhere
+  - Virtual scrolling
+  - Background indexing
+end note
+
+@enduml
