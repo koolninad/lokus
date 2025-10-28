@@ -5,9 +5,9 @@ import SyncStatus from './Auth/SyncStatus.jsx';
 /**
  * Pluginable Status Bar Component
  * Supports left and right sections with priority-based ordering of widgets
- * Compatible with VS Code-style plugin s tatus bar items
+ * Compatible with VS Code-style plugin status bar items
  */
-export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], editor , readingSpeed = 200}) {
+export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], editor, readingSpeed = 200}) {
   const { leftItems, rightItems } = useStatusBar();
   
 
@@ -52,14 +52,12 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
     if (!editor) return null;
 
     const {wordCount, charCount} = countFinder(editor);
-  
+
     const minutes = wordCount ? Math.max(1, Math.ceil(wordCount / readingSpeed)) : 0;
 
     return {wordCount, charCount, minutes };
-    
-  }, [editor?.state?.doc, readingSpeed]);
 
-  if (!stats) return null;
+  }, [editor?.state?.doc, readingSpeed]);
 
   // DEBUG: Log status bar items
 
@@ -185,15 +183,15 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
         {editor && (
             <>
               <div className="obsidian-status-bar-separator" />
-              <div className="obsidian-status-bar-item">
+              <div className="obsidian-status-bar-item statusbar-hide-sm">
                 <span>Words: {stats?.wordCount.toLocaleString()}</span>
               </div>
-              <div className="obsidian-status-bar-separator" />
-              <div className="obsidian-status-bar-item">
+              <div className="obsidian-status-bar-separator statusbar-hide-sm" />
+              <div className="obsidian-status-bar-item statusbar-hide-md">
                 <span>Chars: {stats?.charCount.toLocaleString()}</span>
               </div>
-              <div className="obsidian-status-bar-separator" />
-              <div className="obsidian-status-bar-item">
+              <div className="obsidian-status-bar-separator statusbar-hide-md" />
+              <div className="obsidian-status-bar-item statusbar-hide-xs">
                 <span>~{stats?.minutes} min</span>
               </div>
             </>

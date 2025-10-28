@@ -448,12 +448,16 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .obsidian-status-bar-section {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .obsidian-status-bar-item {
@@ -464,6 +468,14 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   border-radius: 3px;
   transition: background-color 150ms ease;
   cursor: default;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.obsidian-status-bar-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .obsidian-status-bar-item:hover {
@@ -490,6 +502,26 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   height: 12px;
   background-color: rgb(var(--border));
   margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Responsive statusbar - hide less important items on narrow screens */
+@media (max-width: 1024px) {
+  .statusbar-hide-md {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .statusbar-hide-sm {
+    display: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .statusbar-hide-xs {
+    display: none !important;
+  }
 }
 
 /* Modern Fluid Tab Styling - Chrome/Arc/Obsidian inspired */
