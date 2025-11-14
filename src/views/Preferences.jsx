@@ -77,6 +77,11 @@ export default function Preferences() {
     openOnStartup: false
   });
 
+  // Privacy & Data state
+  const [privacySettings, setPrivacySettings] = useState({
+    crashReporting: true
+  });
+
   // Preset themes for quick styling
   const presets = {
     minimal: {
@@ -299,6 +304,18 @@ export default function Preferences() {
         }
       } catch (e) {
         console.error('Failed to load daily notes settings:', e);
+      }
+
+      // Load privacy settings
+      try {
+        const cfg = await readConfig();
+        if (cfg.privacy) {
+          setPrivacySettings({
+            crashReporting: cfg.privacy.crashReporting !== undefined ? cfg.privacy.crashReporting : true
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load privacy settings:', e);
       }
 
       // Get workspace path from opener, URL params, or backend API
@@ -608,6 +625,19 @@ export default function Preferences() {
     }
   };
 
+  const handleCrashReportingToggle = async (enabled) => {
+    try {
+      await updateConfig({
+        privacy: {
+          crashReporting: enabled
+        }
+      });
+      setPrivacySettings(prev => ({ ...prev, crashReporting: enabled }));
+    } catch (e) {
+      console.error('Failed to save privacy settings:', e);
+    }
+  };
+
   const resetEditorSettings = () => {
     // Reset live settings to defaults
     liveEditorSettings.reset();
@@ -679,6 +709,7 @@ export default function Preferences() {
             "Account",
             "AI Assistant",
             "Updates",
+            "Privacy & Data",
           ].map((name) => (
             <button
               key={name}
@@ -3025,6 +3056,105 @@ export default function Preferences() {
 
                   <p className="mt-4 text-sm text-app-muted">
                     Lokus automatically checks for updates in the background. Click the button above to check manually.
+                  </p>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {section === "Privacy & Data" && (
+            <div className="space-y-8 max-w-2xl">
+              <div>
+                <h2 className="text-2xl font-semibold mb-2">Privacy & Data</h2>
+                <p className="text-app-muted">Control what information Lokus collects to help improve the app.</p>
+              </div>
+
+              <section>
+                <h3 className="text-sm uppercase tracking-wide text-app-muted mb-4">Crash Reporting</h3>
+
+                <div className="bg-app-panel rounded-lg p-4 border border-app-border space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <label htmlFor="crashReporting" className="font-medium block mb-1 cursor-pointer">
+                        Send crash reports to help improve Lokus
+                      </label>
+                      <p className="text-sm text-app-muted">
+                        When Lokus encounters an error, automatically send anonymous crash reports to help us identify and fix issues.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      id="crashReporting"
+                      className="w-4 h-4 rounded border-app-border mt-1 cursor-pointer"
+                      checked={privacySettings.crashReporting}
+                      onChange={(e) => handleCrashReportingToggle(e.target.checked)}
+                    />
+                  </div>
+
+                  <div className="pt-4 border-t border-app-border">
+                    <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      What we collect:
+                    </h4>
+                    <ul className="text-sm text-app-muted space-y-1.5 ml-6">
+                      <li className="list-disc">Error messages and stack traces</li>
+                      <li className="list-disc">App version and operating system</li>
+                      <li className="list-disc">Anonymous device identifier</li>
+                      <li className="list-disc">Timestamp of when the error occurred</li>
+                    </ul>
+                  </div>
+
+                  <div className="pt-2 border-t border-app-border">
+                    <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      What we DON'T collect:
+                    </h4>
+                    <ul className="text-sm text-app-muted space-y-1.5 ml-6">
+                      <li className="list-disc">Your notes or file contents</li>
+                      <li className="list-disc">File paths with personal information</li>
+                      <li className="list-disc">Email addresses or authentication tokens</li>
+                      <li className="list-disc">Any personally identifiable information</li>
+                    </ul>
+                  </div>
+
+                  <div className="pt-4 border-t border-app-border flex flex-col gap-2">
+                    <p className="text-xs text-app-muted">Learn more about how we handle your data:</p>
+                    <div className="flex gap-3">
+                      <a
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          alert('Privacy policy documentation coming soon');
+                        }}
+                        className="text-xs text-app-accent hover:underline"
+                      >
+                        View privacy policy
+                      </a>
+                      <span className="text-xs text-app-muted">•</span>
+                      <a
+                        href="https://github.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-app-accent hover:underline"
+                      >
+                        View source code
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-sm uppercase tracking-wide text-app-muted mb-4">Your Privacy Matters</h3>
+
+                <div className="bg-app-panel rounded-lg p-4 border border-app-border">
+                  <p className="text-sm text-app-muted leading-relaxed mb-3">
+                    Lokus is built with privacy as a core principle. Your notes and personal data stay on your device.
+                    Crash reports help us improve the app for everyone while respecting your privacy.
+                  </p>
+                  <p className="text-sm text-app-muted leading-relaxed">
+                    You can disable crash reporting at any time. All previously collected data will be anonymized
+                    and cannot be traced back to you.
                   </p>
                 </div>
               </section>
