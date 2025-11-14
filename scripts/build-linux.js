@@ -21,6 +21,30 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..');
 
+// Load package.json for version information
+const packageJson = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf8'));
+
+// Set Sentry environment variables for source map upload
+// Source maps are generated during build and uploaded to Sentry/GlitchTip
+// for better error stack trace resolution in production
+const sentryEnv = {
+  SENTRY_ORG: process.env.SENTRY_ORG || 'lokus',
+  SENTRY_PROJECT: process.env.SENTRY_PROJECT || 'lokus-app',
+  SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN || '',
+  VITE_SENTRY_RELEASE: packageJson.version,
+  NODE_ENV: 'production',
+};
+
+// Merge with existing environment
+process.env = { ...process.env, ...sentryEnv };
+
+// Log source map upload status
+if (sentryEnv.SENTRY_AUTH_TOKEN) {
+  console.log('✓ Source maps will be uploaded to Sentry');
+} else {
+  console.log('⚠ SENTRY_AUTH_TOKEN not set - skipping source map upload');
+}
+
 // Color codes for terminal output
 const colors = {
   reset: '\x1b[0m',
