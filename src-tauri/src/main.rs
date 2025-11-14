@@ -26,6 +26,7 @@ use windows::{open_workspace_window, open_preferences_window, open_launcher_wind
 use tauri::Manager;
 use tauri_plugin_store::{StoreBuilder, JsonValue};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct SessionState {
@@ -214,17 +215,69 @@ fn main() {
     }
   }
 
+  // Initialize Sentry crash reporting if DSN is configured
+  let _sentry_guard = match std::env::var("TAURI_SENTRY_DSN") {
+    Ok(dsn) if !dsn.is_empty() && std::env::var("VITE_ENABLE_CRASH_REPORTS").unwrap_or_default() == "true" => {
+      println!("[Backend] Initializing crash reporting...");
+
+      let guard = sentry::init((dsn, sentry::ClientOptions {
+        release: Some(env!("CARGO_PKG_VERSION").into()),
+        environment: std::env::var("VITE_SENTRY_ENVIRONMENT").ok().map(Into::into),
+        attach_stacktrace: true,
+        before_send: Some(Arc::new(|mut event| {
+          // Apply privacy filters to all error messages
+          if let Some(exception) = &mut event.exception.values.first_mut() {
+            if let Some(value) = &exception.value {
+              exception.value = Some(privacy::anonymize_error_message(value));
+            }
+          }
+
+          // Scrub breadcrumbs
+          event.breadcrumbs.values.retain(|b| {
+            !b.message.as_ref().map_or(false, |m|
+              m.contains("note_content") ||
+              m.contains("file_content") ||
+              m.contains("password") ||
+              m.contains("token")
+            )
+          });
+
+          // TODO: Check user consent from config here
+          // For now, respect VITE_ENABLE_CRASH_REPORTS
+          Some(event)
+        })),
+        ..Default::default()
+      }));
+
+      println!("✅ Crash reporting initialized");
+      Some(guard)
+    }
+    _ => {
+      println!("[Backend] Crash reporting disabled (no DSN configured or VITE_ENABLE_CRASH_REPORTS=false)");
+      None
+    }
+  };
+
   // Set up panic hook to handle WebView2 cleanup errors gracefully
-  std::panic::set_hook(Box::new(|panic_info| {
+  // This integrates with Sentry's crash reporting
+  std::panic::set_hook(Box::new(move |panic_info| {
     let payload = panic_info.payload();
     if let Some(s) = payload.downcast_ref::<&str>() {
-      // Ignore WebView2 window cleanup errors
+      // Ignore WebView2 window cleanup errors (don't send to Sentry)
       if s.contains("Failed to unregister class") || s.contains("Chrome_WidgetWin") {
         eprintln!("WebView2 cleanup warning (non-critical): {}", s);
         return;
       }
     }
-    // For other panics, print the normal panic message
+
+    // For other panics, send to Sentry and print to console
+    let panic_msg = panic_info.to_string();
+    let safe_msg = privacy::anonymize_error_message(&panic_msg);
+
+    // Capture panic in Sentry
+    sentry::capture_message(&safe_msg, sentry::Level::Fatal);
+
+    // Also print to console
     eprintln!("Application panic: {}", panic_info);
   }));
 
