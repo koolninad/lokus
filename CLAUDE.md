@@ -49,6 +49,78 @@ npm run test:e2e:headed
 - `src-tauri/src/main.rs` - Main Tauri backend
 - `src-tauri/src/` - Rust modules
 
+## 🛡️ **Crash Reporting & Privacy**
+
+### **Self-Hosted Crash Reporting** (GlitchTip)
+
+- ✅ **Opt-in by default** - Users choose to help improve the app
+- ✅ **Self-hosted infrastructure** - Complete control over data
+- ✅ **Zero cost** - Runs on personal hardware
+- ✅ **Privacy-first design** - All PII scrubbed before transmission
+
+### **Privacy Features**
+
+- ✅ **File path anonymization** - `/Users/john/` → `~/`
+- ✅ **Email masking** - `user@domain.com` → `u***@***.com`
+- ✅ **Token redaction** - Bearer tokens, API keys, passwords removed
+- ✅ **Breadcrumb filtering** - No note content or sensitive data
+- ✅ **User control** - Easy opt-out in Preferences UI
+
+### **Technical Stack**
+
+- ✅ **Backend**: Sentry SDK for Rust (src-tauri/src/main.rs:218-282)
+- ✅ **Frontend**: @sentry/react integration (src/main.jsx)
+- ✅ **Privacy modules**:
+  - Rust: src-tauri/src/privacy.rs (28 unit tests)
+  - JavaScript: src/utils/privacy.js (comprehensive filtering)
+- ✅ **Infrastructure**: Docker Compose + GlitchTip + PostgreSQL + Redis
+- ✅ **Access**: Cloudflare Tunnel (secure, no port forwarding)
+- ✅ **Source maps**: Automated upload via Sentry Vite plugin
+
+### **Files & Directories**
+
+- `src-tauri/src/privacy.rs` - Rust PII scrubbing module
+- `src/utils/privacy.js` - JavaScript privacy utilities
+- `src/components/ErrorBoundary.jsx` - User-friendly error UI
+- `src/views/Preferences.jsx` - Privacy settings UI
+- `infrastructure/` - GlitchTip deployment (Docker Compose)
+- `infrastructure/README.md` - Complete deployment guide
+- `docs/privacy.md` - User-facing privacy policy
+- `tests/unit/privacy.test.js` - 28 passing privacy tests
+- `tests/CRASH_REPORTING_TEST_PLAN.md` - Manual testing checklist
+
+### **Environment Variables**
+
+```bash
+# Crash Reporting DSNs
+VITE_SENTRY_DSN=https://key@crash.lokusmd.com/api/project/store/
+TAURI_SENTRY_DSN=https://key@crash.lokusmd.com/api/project/store/
+
+# Environment
+VITE_SENTRY_ENVIRONMENT=development|test|production
+
+# Enable/Disable
+VITE_ENABLE_CRASH_REPORTS=true|false
+
+# Source Maps (build only)
+SENTRY_ORG=lokus
+SENTRY_PROJECT=lokus-app
+SENTRY_AUTH_TOKEN=your_token_here
+```
+
+### **How to Deploy GlitchTip**
+
+```bash
+cd infrastructure
+cp .env.example .env
+# Edit .env with your values
+docker-compose up -d
+docker-compose exec glitchtip ./manage.py createsuperuser
+# Access at http://localhost:8000
+```
+
+See `infrastructure/README.md` for complete instructions.
+
 ## ✨ **Key Features Implemented**
 
 ### **Editor Features**
