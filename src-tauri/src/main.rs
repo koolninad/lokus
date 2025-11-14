@@ -20,6 +20,7 @@ mod oauth_server;
 mod secure_storage;
 mod api_server;
 mod sync;
+mod privacy;
 
 use windows::{open_workspace_window, open_preferences_window, open_launcher_window};
 use tauri::Manager;

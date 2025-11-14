@@ -1,0 +1,19 @@
+# Environment variables with secrets
+.env
+
+# PostgreSQL data
+postgres-data/
+pgdata/
+
+# Backup files
+backups/
+*.sql
+*.sql.gz
+
+# Cloudflare tunnel credentials
+*.json
+tunnel-credentials/
+
+# Logs
+*.log
+logs/
