@@ -5,7 +5,7 @@
  * @module utils/privacy
  */
 
-import { getConfig } from '../core/config/store.js';
+import { readConfig } from '../core/config/store.js';
 
 /**
  * Scrub file paths to remove usernames and home directories
@@ -304,7 +304,7 @@ function scrubObject(obj) {
 export async function beforeSendHook(event, hint) {
   try {
     // Check user consent from config
-    const config = await getConfig();
+    const config = await readConfig();
 
     // If user has not consented to crash reporting, don't send
     if (!config?.privacy?.crashReporting) {

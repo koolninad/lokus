@@ -1,7 +1,7 @@
 import React from 'react';
 import * as Sentry from '@sentry/react';
 import { AlertCircle, RefreshCw, Send } from 'lucide-react';
-import { getConfig } from '../core/config/store.js';
+import { readConfig } from '../core/config/store.js';
 
 /**
  * Fallback UI component shown when an error is caught
@@ -13,7 +13,7 @@ function ErrorFallback({ error, resetError }) {
 
   React.useEffect(() => {
     // Check if crash reporting is enabled
-    getConfig().then(config => {
+    readConfig().then(config => {
       setCrashReportingEnabled(config?.privacy?.crashReporting || false);
     }).catch(() => {
       setCrashReportingEnabled(false);

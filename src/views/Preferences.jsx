@@ -14,6 +14,7 @@ import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import GmailLogin from "../components/gmail/GmailLogin.jsx";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
+import * as Sentry from "@sentry/react";
 
 export default function Preferences() {
   if (import.meta.env.DEV) {
@@ -635,6 +636,20 @@ export default function Preferences() {
       setPrivacySettings(prev => ({ ...prev, crashReporting: enabled }));
     } catch (e) {
       console.error('Failed to save privacy settings:', e);
+    }
+  };
+
+  const handleTestCrash = () => {
+    // Intentionally trigger a crash for testing GlitchTip integration
+    console.log('[Test] Triggering test crash...');
+    try {
+      // This will throw an error that Sentry will catch
+      throw new Error('Test crash from Lokus Preferences - This is intentional for testing crash reporting');
+    } catch (error) {
+      // Capture the error with Sentry
+      Sentry.captureException(error);
+      console.log('[Test] Crash captured and sent to GlitchTip');
+      alert('Test crash sent successfully! Check your GlitchTip dashboard at crash.lokusmd.com');
     }
   };
 
@@ -3141,6 +3156,42 @@ export default function Preferences() {
                       </a>
                     </div>
                   </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-sm uppercase tracking-wide text-app-muted mb-4">Test Crash Reporting</h3>
+
+                <div className="bg-app-panel rounded-lg p-4 border border-app-border">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div className="flex-1">
+                      <h4 className="font-medium block mb-1">
+                        Send a test crash report
+                      </h4>
+                      <p className="text-sm text-app-muted">
+                        Verify that crash reporting is working correctly by sending a test error to GlitchTip.
+                        You should see the test error appear in your crash dashboard within a few seconds.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleTestCrash}
+                    disabled={!privacySettings.crashReporting}
+                    className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                      privacySettings.crashReporting
+                        ? 'bg-app-accent text-white hover:opacity-90'
+                        : 'bg-app-muted text-app-muted cursor-not-allowed opacity-50'
+                    }`}
+                  >
+                    Send Test Crash
+                  </button>
+
+                  {!privacySettings.crashReporting && (
+                    <p className="text-xs text-app-muted mt-2">
+                      Enable crash reporting above to test this feature
+                    </p>
+                  )}
                 </div>
               </section>
 

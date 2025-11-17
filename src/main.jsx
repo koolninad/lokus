@@ -61,8 +61,8 @@ if (import.meta.env.VITE_SENTRY_DSN) {
       // Privacy-first: scrub PII before sending
       beforeSend: beforeSendHook,
 
-      // Don't send in development
-      enabled: import.meta.env.MODE === 'production',
+      // Enable in development for testing (normally only in production)
+      enabled: true,
     });
 
     console.log('[Sentry] Crash reporting initialized');

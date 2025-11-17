@@ -78,7 +78,7 @@ libgit2-sys = { version = "0.16", features = ["vendored"] }
 openssl = { version = "0.10", features = ["vendored"] }
 # Crash reporting
 # Using only sentry (not sentry-tauri) to avoid webkit2 linking conflict
-sentry = { version = "0.34", features = ["backtrace", "contexts", "panic", "debug-images", "anyhow"], default-features = false }
+sentry = { version = "0.34", features = ["backtrace", "contexts", "panic", "debug-images", "anyhow", "reqwest", "rustls"], default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"
