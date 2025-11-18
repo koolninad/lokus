@@ -12,6 +12,7 @@ import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import AIAssistant from "./preferences/AIAssistant.jsx";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
 import GmailLogin from "../components/gmail/GmailLogin.jsx";
+import ReleaseStats from "../components/ReleaseStats.jsx";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 
@@ -679,6 +680,7 @@ export default function Preferences() {
             "Account",
             "AI Assistant",
             "Updates",
+            "Release Stats",
           ].map((name) => (
             <button
               key={name}
@@ -3033,6 +3035,10 @@ export default function Preferences() {
 
           {section === "AI Assistant" && (
             <AIAssistant />
+          )}
+
+          {section === "Release Stats" && (
+            <ReleaseStats />
           )}
         </main>
       </div>
