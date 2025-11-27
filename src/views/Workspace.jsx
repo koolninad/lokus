@@ -67,6 +67,12 @@ import { ImageViewerTab } from "../components/ImageViewer/ImageViewerTab.jsx";
 import { isImageFile, findImageFiles } from "../utils/imageUtils.js";
 import TagManagementModal from "../components/TagManagementModal.jsx";
 import ProductTour from "../components/ProductTour.jsx";
+import ExternalDropZone from "../components/ExternalDropZone.jsx";
+import { AnimatePresence, motion } from "framer-motion";
+import { useDropPosition } from "../hooks/useDropPosition.js";
+import { useAutoExpand } from "../hooks/useAutoExpand.js";
+import DropIndicator from "../components/FileTree/DropIndicator.jsx";
+import Breadcrumbs from "../components/FileTree/Breadcrumbs.jsx";
 import "../styles/product-tour.css";
 
 const MAX_OPEN_TABS = 10;
@@ -918,6 +924,12 @@ function WorkspaceWithScope({ path }) {
   const [showBases, setShowBases] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [showGmail, setShowGmail] = useState(false);
+
+  // External drag-and-drop hooks
+  const { dropPosition, updateDropPosition, clearDropPosition } = useDropPosition();
+  const { scheduleExpand, cancelExpand } = useAutoExpand((folderPath) => {
+    setExpandedFolders((prev) => new Set([...prev, folderPath]));
+  }, 800);
   const [showTagModal, setShowTagModal] = useState(false);
   const [tagModalFile, setTagModalFile] = useState(null);
   // Graph view now opens as a tab instead of sidebar panel
