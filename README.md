@@ -4,11 +4,11 @@
 
 # Lokus
 
-### The Open-Source Note-Taking App for the Modern Developer
+### A Modern, Local-First Markdown Note-Taking App
 
-**Local-first markdown notes with database views, AI integration, and blazing-fast search.**
+**Database views, knowledge graphs, AI integration, and a powerful editor.**
 
-Built with React + Rust. Zero vendor lock-in. Your data, your device.
+Built with React + Rust. Open source. Your data stays on your device.
 
 ---
 
@@ -28,63 +28,20 @@ Built with React + Rust. Zero vendor lock-in. Your data, your device.
 
 ---
 
-<div align="center">
+## What is Lokus?
 
-### Quick Links
+Lokus is an open-source, local-first note-taking application for developers, researchers, and anyone who wants to organize their knowledge. All your data stays on your device - no cloud required, no subscription needed.
 
-[Download](#-download) &bull; [Features](#-key-features) &bull; [Screenshots](#-screenshots) &bull; [Quick Start](#-quick-start) &bull; [Documentation](#-documentation) &bull; [Contributing](#-contributing) &bull; [Sponsor](#-sponsor)
+### Key Highlights
 
-</div>
-
----
-
-## Why Lokus?
-
-**Lokus** is a next-generation, local-first note-taking application designed for developers, researchers, and knowledge workers who demand performance, privacy, and powerful features without compromise.
-
-<table>
-<tr>
-<td width="50%">
-
-### The Problem
-
-- Note-taking apps are slow and bloated
-- Cloud-first means your data isn't truly yours
-- Powerful features require expensive subscriptions
-- Switching between tools is painful
-
-</td>
-<td width="50%">
-
-### The Lokus Solution
-
-- **100x faster search** with Quantum architecture
-- **100% local-first** - your data never leaves your device
-- **All features free** - MIT licensed, forever
-- **Obsidian compatible** - use your existing vault
-
-</td>
-</tr>
-</table>
-
----
-
-## Comparison
-
-| Feature | Obsidian | Notion | Lokus |
-|---------|:--------:|:------:|:-----:|
-| **Database Views** | Plugin | Built-in | **Built-in** |
-| **3D Knowledge Graph** | No | No | **Yes** |
-| **AI Integration** | Plugins | Built-in | **68+ MCP Tools** |
-| **Sync** | $10/month | Free (cloud) | **Free (any cloud)** |
-| **App Size** | ~100MB | Web-based | **~10MB** |
-| **Search Speed** | Standard | Standard | **100x Faster** |
-| **Startup Time** | 2-3s | N/A | **<1 second** |
-| **Memory Usage** | ~300MB | N/A | **~30MB** |
-| **Local-First** | Yes | No | **Yes** |
-| **Open Source** | No | No | **MIT License** |
-| **Plugin System** | Yes | No | **VS Code-level** |
-| **Canvas** | Plugin | No | **Built-in** |
+- **Local-first** - Your notes are stored as plain markdown files on your computer
+- **Database views** - Turn your notes into Notion-style databases with filtering and sorting
+- **Knowledge graph** - Visualize connections between your notes in 2D or 3D
+- **AI integration** - Built-in MCP server with 68+ tools for AI assistants
+- **Rich editor** - TipTap-powered editor with math, code blocks, tables, and more
+- **Obsidian compatible** - Works with your existing Obsidian vault
+- **Cross-platform** - Windows, macOS, and Linux
+- **Free forever** - MIT licensed, no subscription
 
 ---
 
@@ -92,11 +49,9 @@ Built with React + Rust. Zero vendor lock-in. Your data, your device.
 
 <div align="center">
 
-### Get Lokus for Your Platform
-
-[![Download for macOS](https://img.shields.io/badge/macOS-Download%20.dmg-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/lokus-ai/lokus/releases/latest)
-[![Download for Windows](https://img.shields.io/badge/Windows-Download%20.exe-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/lokus-ai/lokus/releases/latest)
-[![Download for Linux](https://img.shields.io/badge/Linux-Download%20.AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/lokus-ai/lokus/releases/latest)
+[![Download for macOS](https://img.shields.io/badge/macOS-Download-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/lokus-ai/lokus/releases/latest)
+[![Download for Windows](https://img.shields.io/badge/Windows-Download-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/lokus-ai/lokus/releases/latest)
+[![Download for Linux](https://img.shields.io/badge/Linux-Download-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/lokus-ai/lokus/releases/latest)
 
 **Current Version: v1.3.13** | [All Releases](https://github.com/lokus-ai/lokus/releases) | [Changelog](CHANGELOG.md)
 
@@ -104,84 +59,58 @@ Built with React + Rust. Zero vendor lock-in. Your data, your device.
 
 ### Installation
 
-<details>
-<summary><b>macOS</b> (Apple Silicon & Intel)</summary>
-
+**macOS** (Apple Silicon & Intel)
 ```bash
-# Download the .dmg file from releases
-# Open and drag Lokus to Applications
+# Download .dmg from releases, open it, drag Lokus to Applications
 # First launch: Right-click → Open (to bypass Gatekeeper)
 ```
 
-</details>
-
-<details>
-<summary><b>Windows</b> (x64)</summary>
-
+**Windows** (x64)
 ```bash
-# Download the .exe installer or .zip portable version
-# Run the installer or extract the zip
+# Download .exe installer or .zip portable version
 ```
 
 > **Note**: Windows may show a SmartScreen warning initially. The app is open-source and safe.
 
-</details>
-
-<details>
-<summary><b>Linux</b> (AppImage)</summary>
-
+**Linux** (AppImage)
 ```bash
 wget https://github.com/lokus-ai/lokus/releases/latest/download/lokus.AppImage
 chmod +x lokus.AppImage
 ./lokus.AppImage
 ```
 
-</details>
-
 ---
 
-## Key Features
+## Features
 
-<details open>
-<summary><b>Rich Markdown Editor</b> - Powered by TipTap</summary>
+### Rich Markdown Editor
 
-<br>
+Built on TipTap, our editor supports:
 
-The most capable markdown editor in any note-taking app:
+- Full markdown syntax (CommonMark + GFM)
+- LaTeX math equations - inline `$x^2$` and block `$$E=mc^2$$`
+- Wiki links - `[[Note Name]]` with autocomplete
+- Syntax highlighting for 100+ languages
+- Resizable tables with sorting
+- Task lists with checkboxes
+- Images (local and web)
+- Mermaid diagrams
+- Callout blocks
+- Vim mode (optional)
 
-- **Full Markdown Support** - CommonMark + GFM extensions
-- **LaTeX Math** - Inline `$x^2$` and block `$$E=mc^2$$` with KaTeX
-- **Wiki Links** - `[[Note Name]]` with autocomplete and preview
-- **100+ Languages** - Syntax highlighting with line numbers
-- **Tables** - Resizable columns, sorting, Excel paste support
-- **Task Lists** - Multiple status states and progress tracking
-- **Images** - Lazy loading, auto-compression, local & web
-- **Smart Paste** - HTML automatically converts to Markdown
-- **Split Pane** - Side-by-side editing with `Cmd/Ctrl + \`
-- **Vim Mode** - Full Vi/Vim keybindings (optional)
-- **Callouts** - Info, warning, danger blocks
-- **Mermaid Diagrams** - Flowcharts, sequence diagrams, and more
+### Database Views (Bases)
 
-</details>
+Transform your markdown files into databases:
 
-<details>
-<summary><b>Database Views (Bases)</b> - Like Notion, Built-in</summary>
-
-<br>
-
-Transform your markdown files into powerful databases:
-
-- **8 Property Types** - Text, Number, Date, Select, Multi-select, Checkbox, URL, Email
-- **YAML Frontmatter** - Automatic property extraction
-- **Inline Editing** - Click any cell to edit directly
-- **Advanced Filtering** - AND/OR logic with 15+ operators
-- **Sorting & Grouping** - Multi-column support
-- **Multiple Views** - Different views for the same data
-- **Quantum Search** - Lightning-fast database queries
+- **8 property types** - Text, Number, Date, Select, Multi-select, Checkbox, URL, Email
+- **YAML frontmatter** - Properties are extracted automatically
+- **Filtering** - AND/OR logic with multiple operators
+- **Sorting & grouping** - Organize your data how you want
+- **Inline editing** - Click cells to edit directly
 
 ```yaml
 ---
-title: Project Alpha
+title: My Project
 status: In Progress
 priority: High
 due_date: 2025-12-31
@@ -189,100 +118,50 @@ tags: [development, urgent]
 ---
 ```
 
-</details>
+### Knowledge Graph
 
-<details>
-<summary><b>Knowledge Graph</b> - Interactive 2D/3D Visualization</summary>
+Visualize the connections between your notes:
 
-<br>
+- 2D and 3D visualization modes
+- Click nodes to navigate
+- Filter by tags or folders
+- Community detection for clustering
+- Export as PNG/SVG
 
-See the connections between your ideas:
+### AI Integration (MCP Server)
 
-- **2D & 3D Views** - Toggle between visualization modes
-- **Interactive Navigation** - Click nodes to open notes
-- **Community Detection** - Automatic clustering of related notes
-- **Force-Directed Layout** - Physics-based node positioning
-- **Filter by Tags/Paths** - Custom graph queries
-- **Export** - PNG/SVG for presentations
-- **Scales to 10,000+ Notes** - Sub-100ms rendering
+Built-in Model Context Protocol server with 68+ tools:
 
-</details>
+| Category | Tools |
+|----------|-------|
+| Note Management | 11 tools - create, read, update, delete |
+| Workspace Operations | 12 tools - file management |
+| Search | 16 tools - find content across notes |
+| Analysis | 10 tools - content analysis |
+| File Operations | 6 tools - move, rename, organize |
+| Editor | 10 tools - formatting, validation |
 
-<details>
-<summary><b>AI Integration (MCP Server)</b> - 68+ Built-in Tools</summary>
+The MCP server auto-starts with Lokus - connect any AI assistant that supports MCP.
 
-<br>
+### Canvas
 
-The most comprehensive AI integration in any note-taking app:
+Infinite canvas powered by TLDraw:
 
-| Category | Tools | Description |
-|----------|-------|-------------|
-| **Note Management** | 11 | Create, read, update, delete, organize |
-| **Workspace Operations** | 12 | File management, folder operations |
-| **Advanced Search** | 16 | Quantum search, semantic queries |
-| **AI Analysis** | 10 | Content analysis, suggestions, summaries |
-| **File Operations** | 6 | Move, rename, bulk operations |
-| **Editor Enhancements** | 10 | Format, validate, transform |
+- Freeform drawing with shapes and text
+- Embed notes on the canvas
+- Kanban boards for task management
+- Export as PNG/SVG
 
-- **Auto-starts with Lokus** - Zero configuration needed
-- **Model Context Protocol** - Connect any AI assistant
-- **Local-first** - Your data never leaves your device
+### More Features
 
-</details>
-
-<details>
-<summary><b>Quantum Search</b> - 100x Faster Than Alternatives</summary>
-
-<br>
-
-Revolutionary search architecture:
-
-| Metric | Traditional | Lokus Quantum |
-|--------|-------------|---------------|
-| **10,000 files** | 2,400ms | **22ms** |
-| **Memory** | 100% | **10%** |
-| **Latency** | Standard | **Sub-millisecond** |
-
-- **O(1) Lookups** - Constant-time query performance
-- **Neural Semantic Cache** - Predictive search results
-- **Full-text + Metadata** - Search everything at once
-- **Regex Support** - Advanced pattern matching
-- **Boolean Queries** - AND/OR/NOT operators
-
-</details>
-
-<details>
-<summary><b>Canvas & Visualization</b> - TLDraw Powered</summary>
-
-<br>
-
-Infinite canvas for spatial thinking:
-
-- **Freeform Drawing** - Shapes, text, connectors
-- **Embed Notes** - Link notes directly on canvas
-- **Image Support** - Drag & drop images
-- **Kanban Boards** - Visual task management
-- **File Persistence** - `.canvas` file format
-- **Export** - PNG, SVG for sharing
-
-</details>
-
-<details>
-<summary><b>More Features</b></summary>
-
-<br>
-
-- **Template System** - 90+ features including date math, filters, conditionals, loops
-- **Plugin System** - VS Code-level extensibility with SDK
-- **Gmail Integration** - OAuth 2.0, import emails as notes
-- **Theme System** - Dark/light mode with custom themes
-- **Command Palette** - `Cmd/Ctrl + K` for everything
-- **Global Shortcuts** - System-wide hotkeys
-- **Git Integration** - Version control built-in
-- **File Watcher** - Auto-reload on external changes
-- **Crash Reporting** - Self-hosted Sentry integration
-
-</details>
+- **Templates** - Create note templates with variables and logic
+- **Plugin system** - Extend functionality with plugins
+- **Gmail integration** - Import emails as notes (OAuth 2.0)
+- **Theme system** - Dark/light mode with custom themes
+- **Command palette** - Quick access with `Cmd/Ctrl + K`
+- **Global shortcuts** - System-wide hotkeys
+- **Git integration** - Built-in version control
+- **File watcher** - Auto-reload when files change externally
 
 ---
 
@@ -290,17 +169,17 @@ Infinite canvas for spatial thinking:
 
 <div align="center">
 
-### Rich Markdown Editor
+### Editor
 <img src="assets/screenshots/screenshot-1.png" alt="Rich Markdown Editor" width="800">
 
-### 3D Knowledge Graph
-<img src="assets/screenshots/screenshot-2.png" alt="3D Knowledge Graph" width="800">
+### Knowledge Graph
+<img src="assets/screenshots/screenshot-2.png" alt="Knowledge Graph" width="800">
 
-### Database Views (Bases)
+### Database Views
 <img src="assets/screenshots/screenshot-3.png" alt="Database Views" width="800">
 
-### Interactive Navigation
-<img src="assets/screenshots/screenshot-4.png" alt="Interactive Navigation" width="800">
+### Navigation
+<img src="assets/screenshots/screenshot-4.png" alt="Navigation" width="800">
 
 </div>
 
@@ -310,24 +189,24 @@ Infinite canvas for spatial thinking:
 
 ### For Users
 
-1. **Download** Lokus from the [releases page](https://github.com/lokus-ai/lokus/releases)
-2. **Install** and launch the application
-3. **Select or create** a workspace (compatible with Obsidian vaults!)
-4. **Start writing** with the most powerful markdown editor available
+1. Download Lokus from the [releases page](https://github.com/lokus-ai/lokus/releases)
+2. Install and launch
+3. Select or create a workspace (works with Obsidian vaults)
+4. Start writing
 
 ### For Developers
 
-**Option 1: Dev Container (Recommended)**
+**Using Dev Container (Recommended)**
 
 ```bash
 # Prerequisites: Docker + VS Code + Dev Containers extension
 git clone https://github.com/lokus-ai/lokus.git
 cd lokus
 code .
-# Click "Reopen in Container" - everything installs automatically!
+# Click "Reopen in Container" - everything installs automatically
 ```
 
-**Option 2: Manual Setup**
+**Manual Setup**
 
 ```bash
 # Prerequisites: Node.js 18+, Rust (rustup)
@@ -340,129 +219,86 @@ npm run tauri dev
 
 # Build
 npm run tauri build
+
+# Tests
+npm test           # Unit tests
+npm run test:e2e   # E2E tests
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for complete setup instructions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions.
 
 ---
 
 ## Tech Stack
 
-<div align="center">
-
 | Layer | Technology |
-|:-----:|:----------:|
-| **Frontend** | ![React](https://img.shields.io/badge/React_19-61DAFB?style=flat&logo=react&logoColor=black) ![TipTap](https://img.shields.io/badge/TipTap_3.4-000000?style=flat) ![Tailwind](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white) ![Vite](https://img.shields.io/badge/Vite_7-646CFF?style=flat&logo=vite&logoColor=white) |
-| **Backend** | ![Rust](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white) ![Tauri](https://img.shields.io/badge/Tauri_2.0-24C8DB?style=flat&logo=tauri&logoColor=white) ![Tokio](https://img.shields.io/badge/Tokio-000000?style=flat) |
-| **Visualization** | ![Three.js](https://img.shields.io/badge/Three.js-000000?style=flat&logo=three.js&logoColor=white) ![TLDraw](https://img.shields.io/badge/TLDraw_3-000000?style=flat) ![Sigma.js](https://img.shields.io/badge/Sigma.js-000000?style=flat) |
-| **Storage** | ![JSON](https://img.shields.io/badge/JSON-000000?style=flat&logo=json&logoColor=white) Local-first + SQLite (optional) |
-| **Testing** | ![Vitest](https://img.shields.io/badge/Vitest-729B1B?style=flat&logo=vitest&logoColor=white) ![Playwright](https://img.shields.io/badge/Playwright-2EAD33?style=flat&logo=playwright&logoColor=white) 500+ tests |
-
-</div>
-
-### Architecture Highlights
-
-- **47,800+ lines** of React/JavaScript frontend code
-- **5,700+ lines** of Rust backend code
-- **130+ React components**
-- **68+ MCP tools** for AI integration
-- **500+ automated tests** (unit + E2E)
-- **40+ documentation files**
+|-------|------------|
+| Frontend | React 19, TipTap 3.4, Tailwind CSS, Vite 7 |
+| Backend | Rust, Tauri 2.0, Tokio |
+| Visualization | Three.js, Sigma.js, TLDraw 3 |
+| Storage | Local JSON/Markdown files |
+| Testing | Vitest, Playwright |
 
 ---
 
 ## Documentation
 
-<div align="center">
-
-[![Documentation](https://img.shields.io/badge/Read%20the%20Docs-docs.lokusmd.com-blue?style=for-the-badge)](https://docs.lokusmd.com/)
-
-</div>
-
-### Quick Links
-
-| Topic | Description |
-|-------|-------------|
-| [User Guide](https://docs.lokusmd.com/) | Complete user documentation |
-| [Getting Started](https://docs.lokusmd.com/) | First steps with Lokus |
-| [Editor Features](docs/features/editor.md) | Markdown editor capabilities |
-| [Database Views](docs/features/BASES_COMPLETE_GUIDE.md) | Using Bases (databases) |
-| [Graph View](docs/features/graph-view.md) | Knowledge graph visualization |
-| [Templates](docs/templates/README.md) | Template system guide |
-| [MCP Integration](docs/MCP_INTEGRATION_GUIDE.md) | AI tools and MCP server |
-| [Plugin Development](docs/PLUGIN_DEVELOPMENT.md) | Building plugins |
-| [Build Guide](docs/BUILD_GUIDE.md) | Building from source |
+- [User Guide](https://docs.lokusmd.com/)
+- [Editor Features](docs/features/editor.md)
+- [Database Views Guide](docs/features/BASES_COMPLETE_GUIDE.md)
+- [Graph View](docs/features/graph-view.md)
+- [Templates](docs/templates/README.md)
+- [MCP Integration](docs/MCP_INTEGRATION_GUIDE.md)
+- [Plugin Development](docs/PLUGIN_DEVELOPMENT.md)
+- [Build Guide](docs/BUILD_GUIDE.md)
 
 ---
 
 ## Contributing
 
-We welcome contributions from everyone! Lokus is built by the community, for the community.
+We welcome contributions! Whether you're fixing bugs, adding features, improving docs, or creating themes and plugins.
 
 <div align="center">
 
 [![Good First Issues](https://img.shields.io/github/issues/lokus-ai/lokus/good%20first%20issue?label=Good%20First%20Issues&color=7057ff&style=for-the-badge)](https://github.com/lokus-ai/lokus/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
-[![Help Wanted](https://img.shields.io/github/issues/lokus-ai/lokus/help%20wanted?label=Help%20Wanted&color=008672&style=for-the-badge)](https://github.com/lokus-ai/lokus/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)
 
 </div>
-
-### Ways to Contribute
-
-| | Type | How to Help |
-|:-:|------|-------------|
-| **Bug Reports** | Found a bug? Help us fix it by [opening an issue](https://github.com/lokus-ai/lokus/issues/new?template=bug_report.yml) |
-| **Feature Requests** | Have an idea? [Suggest a feature](https://github.com/lokus-ai/lokus/issues/new?template=feature_request.yml) |
-| **Code** | Submit PRs for bugs, features, or optimizations |
-| **Documentation** | Improve guides, fix typos, add examples |
-| **Themes** | Create and share custom themes |
-| **Plugins** | Build plugins with our [SDK](packages/plugin-sdk/) |
-| **Translations** | Help localize Lokus (coming soon) |
-
-### Quick Contribution Guide
 
 ```bash
 # 1. Fork and clone
 git clone https://github.com/YOUR_USERNAME/lokus.git
-cd lokus
 
 # 2. Create a branch
-git checkout -b feature/your-feature-name
+git checkout -b feature/your-feature
 
 # 3. Make changes and test
-npm install
 npm test
 npm run tauri dev
 
 # 4. Submit a PR
-git push origin feature/your-feature-name
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for complete guidelines, coding standards, and development setup.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
 ## Sponsor
 
-Lokus is **100% free and open source**, built by passionate developers who believe in local-first, privacy-respecting software.
-
-Your sponsorship directly funds:
-
-- **Faster development** of new features
-- **Mobile apps** (iOS & Android - Q1 2026)
-- **Better documentation** and tutorials
-- **Infrastructure costs** (crash reporting, website, releases)
-- **Accessibility improvements**
-- **Long-term maintenance**
+Lokus is free and open source. If you find it useful, consider supporting development:
 
 <div align="center">
 
-[![Sponsor on Open Collective](https://img.shields.io/badge/Sponsor%20Us-Open%20Collective-7FADF2?style=for-the-badge&logo=opencollective&logoColor=white)](https://opencollective.com/lokus)
-
-### [Become a Sponsor](https://opencollective.com/lokus)
-
-**100% transparent** - Every expense is publicly visible on Open Collective.
+[![Sponsor on Open Collective](https://img.shields.io/badge/Sponsor-Open%20Collective-7FADF2?style=for-the-badge&logo=opencollective&logoColor=white)](https://opencollective.com/lokus)
 
 </div>
+
+Your support helps with:
+- Feature development
+- Bug fixes
+- Documentation
+- Infrastructure costs
+
+**100% transparent** - All expenses are visible on Open Collective.
 
 ### Sponsors
 
@@ -484,45 +320,33 @@ Your sponsorship directly funds:
 
 </div>
 
-| Channel | Purpose |
-|---------|---------|
-| [Discord](https://discord.com/invite/2rauPDEXcs) | Real-time chat, support, community |
-| [Reddit](https://www.reddit.com/r/LokusMD/) | Share workflows, tips, discussions |
-| [GitHub Discussions](https://github.com/lokus-ai/lokus/discussions) | Q&A, feature requests, announcements |
-| [GitHub Issues](https://github.com/lokus-ai/lokus/issues) | Bug reports, feature tracking |
+- [Discord](https://discord.com/invite/2rauPDEXcs) - Chat, support, community
+- [Reddit](https://www.reddit.com/r/LokusMD/) - Share workflows and tips
+- [GitHub Discussions](https://github.com/lokus-ai/lokus/discussions) - Q&A, feature requests
+- [GitHub Issues](https://github.com/lokus-ai/lokus/issues) - Bug reports
 
 ---
 
 ## Roadmap
 
-### v1.3 "Quantum Leap" (Current)
+### Current (v1.3)
 
 - [x] Database views (Bases)
-- [x] MCP Server with 68+ AI tools
-- [x] Quantum Search architecture
-- [x] Full Windows support
-- [x] Plugin System v2
-- [x] Gmail Integration
-- [x] 3D Knowledge Graph
+- [x] MCP Server with 68+ tools
+- [x] Windows, macOS, Linux support
+- [x] Plugin system
+- [x] Gmail integration
+- [x] 2D/3D knowledge graph
 
-### v1.4 (Next)
+### Planned
 
 - [ ] Mobile apps (iOS & Android)
-- [ ] Calendar view for Bases
-- [ ] Formula support (spreadsheet-like)
+- [ ] Calendar view for databases
 - [ ] PDF annotations
-- [ ] Web clipper extension
-- [ ] E2E encryption (optional)
+- [ ] Web clipper
+- [ ] E2E encryption
 
-### v1.5 (Future)
-
-- [ ] Obsidian plugin compatibility layer
-- [ ] Multi-vault support
-- [ ] AI writing assistant
-- [ ] Export to PDF/DOCX with formatting
-- [ ] Workflow automation
-
-[Vote on features](https://github.com/lokus-ai/lokus/discussions/categories/roadmap) | [View full roadmap](https://github.com/lokus-ai/lokus/projects)
+[Vote on features](https://github.com/lokus-ai/lokus/discussions/categories/roadmap)
 
 ---
 
@@ -531,52 +355,35 @@ Your sponsorship directly funds:
 <details>
 <summary><b>Is Lokus compatible with Obsidian?</b></summary>
 
-**Yes!** Lokus uses standard markdown files. Point it at your Obsidian vault and everything works - notes, wiki links, attachments. No migration needed.
+Yes. Lokus uses standard markdown files. Point it at your Obsidian vault and it works - notes, wiki links, attachments.
 
 </details>
 
 <details>
-<summary><b>Is sync really free?</b></summary>
+<summary><b>Is sync free?</b></summary>
 
-**Yes!** Use any cloud provider you want - Dropbox, Google Drive, iCloud, Syncthing, OneDrive. Your files are standard markdown, so any sync solution works. No vendor lock-in.
-
-</details>
-
-<details>
-<summary><b>Can I use Lokus offline?</b></summary>
-
-**100% yes!** Lokus is local-first. Internet is only needed for Gmail integration and optional cloud features. All core functionality works completely offline.
+Lokus doesn't have built-in sync, but your notes are plain files. Use any sync solution you want - Dropbox, Google Drive, iCloud, Syncthing.
 
 </details>
 
 <details>
-<summary><b>What about my privacy?</b></summary>
+<summary><b>Does it work offline?</b></summary>
 
-Your data never leaves your device. **No telemetry, no tracking, no analytics.** The app is open-source - you can verify this yourself. Optional cloud features (Gmail) use industry-standard OAuth 2.0.
-
-</details>
-
-<details>
-<summary><b>When are mobile apps coming?</b></summary>
-
-Mobile apps for iOS and Android are planned for 2026, built using Tauri Mobile. [Track progress in discussions](https://github.com/lokus-ai/lokus/discussions).
+Yes. Lokus is local-first. Everything works offline except optional features like Gmail integration.
 
 </details>
 
 <details>
-<summary><b>How do I report bugs or request features?</b></summary>
+<summary><b>What about privacy?</b></summary>
 
-- **Bugs**: [Open a bug report](https://github.com/lokus-ai/lokus/issues/new?template=bug_report.yml)
-- **Features**: [Request a feature](https://github.com/lokus-ai/lokus/issues/new?template=feature_request.yml)
-- **Questions**: [Start a discussion](https://github.com/lokus-ai/lokus/discussions)
-- **Chat**: [Join our Discord](https://discord.com/invite/2rauPDEXcs)
+Your data stays on your device. No telemetry, no tracking. The app is open-source - you can verify this yourself.
 
 </details>
 
 <details>
-<summary><b>How can I contribute?</b></summary>
+<summary><b>How do I report bugs?</b></summary>
 
-We welcome all contributions! Check out our [Contributing Guide](CONTRIBUTING.md) for setup instructions. Look for issues labeled [`good first issue`](https://github.com/lokus-ai/lokus/labels/good%20first%20issue) if you're new.
+[Open an issue](https://github.com/lokus-ai/lokus/issues/new?template=bug_report.yml) or [join our Discord](https://discord.com/invite/2rauPDEXcs).
 
 </details>
 
@@ -584,58 +391,34 @@ We welcome all contributions! Check out our [Contributing Guide](CONTRIBUTING.md
 
 ## License
 
-Lokus is licensed under the [MIT License](LICENSE).
+MIT License - free to use, modify, and distribute.
 
-```
-MIT License
-
-Copyright (c) 2024 CodeWithInferno
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-```
+See [LICENSE](LICENSE) for details.
 
 ---
 
 ## Acknowledgments
 
-Lokus stands on the shoulders of giants:
+Built with:
 
-- [Obsidian](https://obsidian.md) - Pioneering local-first knowledge management
-- [Notion](https://notion.so) - Inspiring database views and UX patterns
-- [TipTap](https://tiptap.dev) - The foundation of our amazing editor
-- [Tauri](https://tauri.app) - Enabling lightweight, secure desktop apps
-- [TLDraw](https://tldraw.com) - Powering our infinite canvas
-- [Rust](https://rust-lang.org) - Performance and safety at the core
+- [TipTap](https://tiptap.dev) - Editor framework
+- [Tauri](https://tauri.app) - Desktop app framework
+- [TLDraw](https://tldraw.com) - Canvas
+- [Three.js](https://threejs.org) - 3D visualization
 
-Special thanks to all our [contributors](https://github.com/lokus-ai/lokus/graphs/contributors) and the open-source community!
+Thanks to all [contributors](https://github.com/lokus-ai/lokus/graphs/contributors)!
 
 ---
 
 <div align="center">
 
-### Star History
-
 [![Star History Chart](https://api.star-history.com/svg?repos=lokus-ai/lokus&type=Date)](https://star-history.com/#lokus-ai/lokus&Date)
 
 ---
 
-**Built with care by the Lokus team and contributors worldwide**
-
 [Website](https://lokusmd.com) &bull; [Documentation](https://docs.lokusmd.com/) &bull; [Discord](https://discord.com/invite/2rauPDEXcs) &bull; [Reddit](https://www.reddit.com/r/LokusMD/) &bull; [Sponsor](https://opencollective.com/lokus)
 
----
-
-**If you find Lokus useful, please consider starring the repository!**
-
-**It helps others discover the project and motivates continued development.**
+**If Lokus is useful to you, please star the repo!**
 
 [![Star on GitHub](https://img.shields.io/github/stars/lokus-ai/lokus?style=social)](https://github.com/lokus-ai/lokus)
 
