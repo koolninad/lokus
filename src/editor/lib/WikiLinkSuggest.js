@@ -133,8 +133,12 @@ const WikiLinkSuggest = Extension.create({
         // Allow after [[ for files OR after ^ for blocks
         allow: ({ state, range }) => {
           const $pos = state.selection.$from
-          const parentContent = $pos.parent.textContent
-          const textBefore = parentContent.slice(Math.max(0, $pos.parentOffset - 2), $pos.parentOffset)
+          const pos = state.selection.from
+          const parentStart = $pos.start()
+
+          // Use textBetween with absolute positions to properly handle inline nodes like WikiLinks
+          // (parentOffset doesn't align with textContent when WikiLinks are present)
+          const textBefore = state.doc.textBetween(Math.max(parentStart, pos - 2), pos)
 
           // Check for [[ pattern (file linking)
           const isAfterDoubleBracket = textBefore.endsWith('[[')
@@ -142,13 +146,14 @@ const WikiLinkSuggest = Extension.create({
           // Check for ^ pattern within [[ ]] (block linking)
           // Look for pattern: [[Filename^ or [[Filename.md^
           const wikiLinkPattern = /\[\[([^\]]+)\^$/
-          const fullTextBefore = parentContent.slice(0, $pos.parentOffset)
+          const fullTextBefore = state.doc.textBetween(parentStart, pos)
           const isAfterCaret = wikiLinkPattern.test(fullTextBefore)
 
           dbg('textBefore check', {
             textBefore,
             fullTextBefore: fullTextBefore.slice(-20),
-            parentOffset: $pos.parentOffset,
+            pos,
+            parentStart,
             rangeFrom: range.from,
             isAfterCaret
           })
@@ -405,6 +410,21 @@ const WikiLinkSuggest = Extension.create({
             // FILE MODE: Insert file reference
             const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
             const to = range?.to ?? editor.state.selection.to
+            // Find the [[ position reliably by searching in text (same approach as block mode)
+            const { state } = editor
+            const $pos = state.selection.$from
+            const parentContent = $pos.parent.textContent
+            const textBefore = parentContent.slice(0, $pos.parentOffset)
+
+            // Find where [[ starts
+            const openBracketPos = textBefore.lastIndexOf('[[')
+            if (openBracketPos === -1) {
+              dbg('command: no [[ found in textBefore', { textBefore })
+              return
+            }
+
+            const from = state.selection.from - (textBefore.length - openBracketPos)
+            const to = range?.to ?? state.selection.to
             // Get display name: just the filename without extension
             const rawName = props.title || props.path
             const fileName = rawName.replace(/\.[^.]+$/, '')  // Remove any extension (.md, etc.)
@@ -461,9 +481,40 @@ const WikiLinkSuggest = Extension.create({
           let container
           const place = (rect) => {
             if (!container || !rect) return
-            container.style.left = `${Math.max(8, rect.left)}px`
-            container.style.top = `${Math.min(window.innerHeight - 16, rect.bottom + 6)}px`
-            container.style.width = '384px'
+            const dialogWidth = 384
+            const padding = 16
+            const viewportWidth = window.innerWidth
+            const viewportHeight = window.innerHeight
+
+            // Calculate initial position
+            let left = rect.left
+            let top = rect.bottom + 6
+
+            // Check right edge overflow
+            if (left + dialogWidth + padding > viewportWidth) {
+              left = viewportWidth - dialogWidth - padding
+            }
+
+            // Check left edge
+            if (left < padding) {
+              left = padding
+            }
+
+            // Get container height for bottom edge check
+            const containerHeight = container.offsetHeight || 300 // fallback estimate
+
+            // Check bottom edge overflow - position above cursor if needed
+            if (top + containerHeight + padding > viewportHeight) {
+              top = rect.top - containerHeight - 6
+              // If still goes beyond top edge, align to top with padding
+              if (top < padding) {
+                top = padding
+              }
+            }
+
+            container.style.left = `${left}px`
+            container.style.top = `${top}px`
+            container.style.width = `${dialogWidth}px`
           }
           return {
             onStart: (props) => {
@@ -473,7 +524,7 @@ const WikiLinkSuggest = Extension.create({
                 const range = props.range
                 const textBefore = props.editor.state.doc.textBetween(Math.max(0, range.from - 2), range.from)
                 const isWikiLink = textBefore.endsWith('[')
-                
+
                 if (isWikiLink) {
                   const pos = Math.max(0, Math.min(props.editor.state.doc.content.size, (props.range?.to ?? props.editor.state.selection.to)))
                   const next = props.editor.state.doc.textBetween(pos, Math.min(props.editor.state.doc.content.size, pos + 2))
@@ -608,9 +659,40 @@ const WikiLinkSuggest = Extension.create({
           let container
           const place = (rect) => {
             if (!container || !rect) return
-            container.style.left = `${Math.max(8, rect.left)}px`
-            container.style.top = `${Math.min(window.innerHeight - 16, rect.bottom + 6)}px`
-            container.style.width = '384px'
+            const dialogWidth = 384
+            const padding = 16
+            const viewportWidth = window.innerWidth
+            const viewportHeight = window.innerHeight
+
+            // Calculate initial position
+            let left = rect.left
+            let top = rect.bottom + 6
+
+            // Check right edge overflow
+            if (left + dialogWidth + padding > viewportWidth) {
+              left = viewportWidth - dialogWidth - padding
+            }
+
+            // Check left edge
+            if (left < padding) {
+              left = padding
+            }
+
+            // Get container height for bottom edge check
+            const containerHeight = container.offsetHeight || 300 // fallback estimate
+
+            // Check bottom edge overflow - position above cursor if needed
+            if (top + containerHeight + padding > viewportHeight) {
+              top = rect.top - containerHeight - 6
+              // If still goes beyond top edge, align to top with padding
+              if (top < padding) {
+                top = padding
+              }
+            }
+
+            container.style.left = `${left}px`
+            container.style.top = `${top}px`
+            container.style.width = `${dialogWidth}px`
           }
           return {
             onStart: (props) => {
