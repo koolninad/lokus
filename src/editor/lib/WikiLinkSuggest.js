@@ -408,6 +408,8 @@ const WikiLinkSuggest = Extension.create({
             }
           } else {
             // FILE MODE: Insert file reference
+            const from = Math.max((range?.from ?? editor.state.selection.from) - 1, 1)
+            const to = range?.to ?? editor.state.selection.to
             // Find the [[ position reliably by searching in text (same approach as block mode)
             const { state } = editor
             const $pos = state.selection.$from
