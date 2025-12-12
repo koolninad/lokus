@@ -1,17 +1,110 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import Launcher from "./views/Launcher";
-import Workspace from "./views/Workspace";
-import Preferences from "./views/Preferences";
+// Lazy load heavy views
+const Workspace = lazy(() => import("./views/Workspace"));
+const Preferences = lazy(() => import("./views/Preferences"));
+
+import UpdateChecker from "./components/UpdateChecker";
+import { RemoteAnnouncement } from "./components/RemoteAnnouncement";
+import { Toaster } from "./components/ui/toaster";
 import { usePreferenceActivation } from "./hooks/usePreferenceActivation";
 import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
+import { PluginProvider } from "./hooks/usePlugins.jsx";
+import { AuthProvider } from "./core/auth/AuthContext.jsx";
+import platformService from "./services/platform/PlatformService.js";
+import { ToastProvider } from "./components/Toast.jsx";
+import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
+import editorConfigCache from "./core/editor/config-cache.js";
+// Import workspace manager to expose developer utilities
+import "./core/workspace/manager.js";
+// Import MCP client for stdio-based connections
+import mcpClient from "./core/mcp/client.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
+import * as Sentry from "@sentry/react";
+
+// Simple loading spinner for Suspense fallback
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-screen bg-app-bg text-app-text select-none">
+    <div className="flex flex-col items-center gap-2 animate-pulse">
+      <div className="text-4xl font-bold tracking-tight text-app-accent">Lokus</div>
+    </div>
+  </div>
+);
 
 function App() {
   // Use the hooks' values directly (no setter param expected)
   const { isPrefsWindow } = usePreferenceActivation();
   const activePath = useWorkspaceActivation();
+
+
+  // Track view navigation with breadcrumbs
+  useEffect(() => {
+    if (isPrefsWindow) {
+      Sentry.addBreadcrumb({
+        category: 'navigation',
+        message: 'Navigated to Preferences',
+        level: 'info',
+      });
+    } else if (activePath) {
+      Sentry.addBreadcrumb({
+        category: 'navigation',
+        message: 'Navigated to Workspace',
+        level: 'info',
+        data: { path: activePath },
+      });
+    } else {
+      Sentry.addBreadcrumb({
+        category: 'navigation',
+        message: 'Navigated to Launcher',
+        level: 'info',
+      });
+    }
+  }, [isPrefsWindow, activePath]);
+
+  // Initialize markdown syntax config and editor config cache on app startup
+  useEffect(() => {
+    markdownSyntaxConfig.init();
+    editorConfigCache.init(); // Pre-load editor config to eliminate "Loading editor..." delay
+
+    // Check for updates 3 seconds after startup
+    const updateTimer = setTimeout(() => {
+      window.dispatchEvent(new Event('check-for-update'));
+    }, 3000);
+
+    return () => clearTimeout(updateTimer);
+  }, []);
+
+  useEffect(() => {
+    // Add platform class to document body
+    if (platformService.isWindows()) {
+      document.body.classList.add('windows');
+      // Check if Windows 11 for additional styling
+      if (navigator.userAgent.includes('Windows NT 10.0')) {
+        document.body.classList.add('windows-11');
+      }
+      Sentry.addBreadcrumb({
+        category: 'platform',
+        message: 'Windows platform detected',
+        level: 'info',
+      });
+    } else if (platformService.isMacOS()) {
+      document.body.classList.add('macos');
+      Sentry.addBreadcrumb({
+        category: 'platform',
+        message: 'macOS platform detected',
+        level: 'info',
+      });
+    } else if (platformService.isLinux()) {
+      document.body.classList.add('linux');
+      Sentry.addBreadcrumb({
+        category: 'platform',
+        message: 'Linux platform detected',
+        level: 'info',
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -37,13 +130,14 @@ function App() {
         if (document.hasFocus()) {
           registerAppShortcuts();
         }
-        
+
+        // MCP client is ready for configuration instructions (no server management needed)
+
         return () => {
           window.removeEventListener('focus', onFocus);
           window.removeEventListener('blur', onBlur);
         };
       } catch (e) {
-        console.error("Failed to initialize shortcuts:", e);
       }
     };
 
@@ -58,15 +152,35 @@ function App() {
     };
   }, []);
 
-  if (isPrefsWindow) {
-    return <Preferences />;
-  }
+  return (
+    <div className="app-root">
+      {/* Titlebar only for Workspace - Preferences and Launcher don't need it */}
+      {!isPrefsWindow && activePath && (
+        <div className="app-titlebar" data-tauri-drag-region></div>
+      )}
 
-  if (activePath) {
-    return <Workspace initialPath={activePath} />;
-  }
-
-  return <Launcher />;
+      <div className="app-content">
+        <ToastProvider>
+          <AuthProvider>
+            <PluginProvider>
+              <Suspense fallback={<LoadingFallback />}>
+                {isPrefsWindow ? (
+                  <Preferences />
+                ) : activePath ? (
+                  <Workspace initialPath={activePath} />
+                ) : (
+                  <Launcher />
+                )}
+              </Suspense>
+            </PluginProvider>
+          </AuthProvider>
+          <UpdateChecker />
+        </ToastProvider>
+        <RemoteAnnouncement />
+        <Toaster />
+      </div>
+    </div>
+  );
 }
 
 export default App;

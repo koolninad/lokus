@@ -1,12 +1,7 @@
 import React from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-
-const Icon = ({ path, className = "w-5 h-5" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d={path} />
-  </svg>
-);
+import { ColoredFileIcon } from "../components/FileIcon.jsx";
 
 export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose }) {
   const { attributes, listeners, setNodeRef: draggableRef, transform, isDragging } = useDraggable({
@@ -23,12 +18,9 @@ export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose 
     transition: isDragging ? "none" : undefined,
   };
 
-  // Premium, understated look: flat tabs with bottom accent line for active,
-  // subtle hover background, and separators between tabs.
-  const baseClasses = "group h-10 -mb-[1px] mr-1 flex items-center gap-2 px-3 text-sm transition-colors cursor-pointer select-none border-b-2";
-  const activeClasses = isActive
-    ? "border-app-accent text-app-text"
-    : "border-transparent text-app-muted hover:text-app-text hover:bg-app-bg/40";
+  // Obsidian-style tabs with proper spacing
+  const baseClasses = "obsidian-tab group";
+  const activeClasses = isActive ? "active" : "";
   const draggingClasses = isDragging ? "opacity-50 z-10" : "";
 
   return (
@@ -44,23 +36,35 @@ export function DraggableTab({ tab, isActive, isUnsaved, onTabClick, onTabClose 
         onClick={() => onTabClick(tab.path)}
         className={`${baseClasses} ${activeClasses} ${draggingClasses}`}
       >
-        <span className="truncate max-w-[220px]">{tab.name.replace(/\.md$/, "")}</span>
-        <div className="w-5 h-5 ml-1 flex items-center justify-center rounded hover:bg-app-bg/50">
+        {/* File type icon */}
+        <ColoredFileIcon
+          fileName={tab.name}
+          isDirectory={false}
+          className="obsidian-file-icon"
+          showChevron={false}
+        />
+        <span className="truncate flex-1 text-sm font-medium">
+          {tab.name.replace(/\.(md|txt|json|js|jsx|ts|tsx|py|html|css|canvas)$/, "") || tab.name}
+        </span>
+        <div className="w-4 h-4 ml-auto flex items-center justify-center">
+          {/* Unsaved indicator - always show if unsaved */}
+          {isUnsaved && (
+            <div className="w-2 h-2 rounded-full bg-app-accent group-hover:hidden"></div>
+          )}
+          
+          {/* Close button - show on hover */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               onTabClose(tab.path);
             }}
-            className="p-0.5 rounded hidden group-hover:flex items-center justify-center"
+            className="obsidian-tab-close"
           >
-            <Icon path="M6 18L18 6M6 6l12 12" className="w-3.5 h-3.5" />
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
           </button>
-          {isUnsaved && (
-            <div className="w-1.5 h-1.5 rounded-full bg-app-accent group-hover:hidden"></div>
-          )}
         </div>
-        {/* right separator */}
-        {!isActive && <div className="ml-1 h-4 w-px bg-app-border/50" />}
       </div>
     </div>
   );

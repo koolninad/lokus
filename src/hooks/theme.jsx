@@ -5,25 +5,34 @@ import {
   applyInitialTheme,
   readGlobalVisuals,
   setGlobalActiveTheme,
-  setGlobalVisuals,
-  broadcastTheme,
 } from "../core/theme/manager.js";
 
 const ThemeCtx = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(null);
-  const [mode, setMode] = useState("system");
-  const [accent, setAccent] = useState("violet");
+  const [isThemeLoaded, setIsThemeLoaded] = useState(false);
 
-  // Load initial theme from config
+  // Load initial theme from config with better error handling
   useEffect(() => {
     async function loadInitial() {
-      const visuals = await readGlobalVisuals();
-      setTheme(visuals.theme);
-      setMode(visuals.mode || "system");
-      setAccent(visuals.accent || "violet");
-      await applyInitialTheme();
+      try {        // Apply initial theme immediately to prevent flash of unthemed content
+        await applyInitialTheme();
+
+        // Then read the actual configured theme
+        const visuals = await readGlobalVisuals();        if (visuals && visuals.theme) {
+          setTheme(visuals.theme);
+          // Re-apply theme if it's different from the initial
+          await setGlobalActiveTheme(visuals.theme);
+        } else {
+          // Fallback to a default theme if none is configured          setTheme('default');
+        }
+
+        setIsThemeLoaded(true);      } catch (error) {
+        console.error('🎨 Error loading initial theme:', error);
+        // Ensure we still mark as loaded to prevent infinite loading
+        setIsThemeLoaded(true);
+      }
     }
     loadInitial();
   }, []);
@@ -42,10 +51,8 @@ export function ThemeProvider({ children }) {
       const unlistenPromise = listen("theme:apply", (e) => {
         const p = (e.payload || {});
         if (p.tokens) applyTokens(p.tokens);
-        if (p.visuals) {
+        if (p.visuals && p.visuals.theme !== undefined) {
           setTheme(p.visuals.theme);
-          setMode(p.visuals.mode);
-          setAccent(p.visuals.accent);
         }
       });
       return () => { unlistenPromise.then(unlisten => unlisten()); };
@@ -53,10 +60,8 @@ export function ThemeProvider({ children }) {
       const onDom = (e) => {
         const p = (e.detail || {});
         if (p.tokens) applyTokens(p.tokens);
-        if (p.visuals) {
+        if (p.visuals && p.visuals.theme !== undefined) {
           setTheme(p.visuals.theme);
-          setMode(p.visuals.mode);
-          setAccent(p.visuals.accent);
         }
       };
       window.addEventListener('theme:apply', onDom);
@@ -64,42 +69,30 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
-  // Apply the data-theme attribute to the root element
-  useEffect(() => {
-    console.log("Current mode:", mode);
-    if (mode === "system") {
-      document.documentElement.removeAttribute("data-theme");
-    } else {
-      document.documentElement.setAttribute("data-theme", mode);
-    }
-  }, [mode]);
+  // Theme application is now handled entirely by theme files
 
   const handleSetTheme = useCallback(async (newTheme) => {
-    console.log("Setting theme:", newTheme);
     setTheme(newTheme);
     await setGlobalActiveTheme(newTheme);
-    const visuals = await readGlobalVisuals();
-    await broadcastTheme({ visuals });
-  }, []);
-
-  const handleSetMode = useCallback(async (newMode) => {
-    setMode(newMode);
-    await setGlobalVisuals({ mode: newMode });
-  }, []);
-
-  const handleSetAccent = useCallback(async (newAccent) => {
-    setAccent(newAccent);
-    await setGlobalVisuals({ accent: newAccent });
   }, []);
 
   const value = {
     theme,
     setTheme: handleSetTheme,
-    mode,
-    setMode: handleSetMode,
-    accent,
-    setAccent: handleSetAccent,
+    isThemeLoaded,
   };
+
+  // Optionally show a loading state while theme is being loaded
+  // This prevents flash of unthemed content on initial load
+  if (!isThemeLoaded) {
+    return (
+      <ThemeCtx.Provider value={value}>
+        <div className="fixed inset-0 bg-app-bg" style={{ visibility: 'hidden' }}>
+          {children}
+        </div>
+      </ThemeCtx.Provider>
+    );
+  }
 
   return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;
 }

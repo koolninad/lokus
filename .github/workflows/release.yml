@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ${{ matrix.platform }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+        
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Clean npm cache and dependencies
+        shell: bash
+        run: |
+          rm -rf node_modules package-lock.json
+          npm cache clean --force
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          VITE_AUTH_BASE_URL: https://lokusmd.com
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH_BASE64: ${{ secrets.APPLE_API_KEY_PATH_BASE64 }}
+        with:
+          includeUpdaterJson: true
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Lokus ${{ github.ref_name }}'
+          releaseBody: |
+            🚀 **Lokus ${{ github.ref_name }}**
+            
+            See [CHANGELOG.md](https://github.com/lokus-ai/lokus/blob/main/CHANGELOG.md) for full details.
+            
+            ---
+            
+            ## 📦 Installation
+            
+            **🍎 macOS**
+            - Download `Lokus_x64.app.tar.gz` or `.dmg`
+            - Apple Silicon: Universal binary included
+            
+            **🪟 Windows**
+            - Download `.msi` for installer
+            - Or `.exe` for portable version
+            
+            **🐧 Linux**
+            - Ubuntu/Debian: `.deb`
+            - Fedora/RHEL: `.rpm`
+            - Universal: `.AppImage`
+            
+            ---
+            
+            **Full Changelog**: https://github.com/lokus-ai/lokus/compare/${{ github.event.before }}...${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false

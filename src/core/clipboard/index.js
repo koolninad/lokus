@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { stripHtml, sanitizeHtml } from '../security/index.js';
 
 /**
  * Custom clipboard manager that syncs with macOS system clipboard
@@ -19,7 +20,6 @@ class ClipboardManager {
       this._notifyListeners('write', { type: 'text', data: text });
       return true;
     } catch (error) {
-      console.error('Failed to write text to clipboard:', error);
       return false;
     }
   }
@@ -32,7 +32,6 @@ class ClipboardManager {
       const text = await invoke('clipboard_read_text');
       return text;
     } catch (error) {
-      console.error('Failed to read text from clipboard:', error);
       return '';
     }
   }
@@ -45,17 +44,14 @@ class ClipboardManager {
       // Try to write HTML first
       await invoke('clipboard_write_html', { html });
       
-      // If no plain text provided, strip HTML tags as fallback
+      // If no plain text provided, strip HTML tags as fallback (secure)
       if (!plainText) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        plainText = tempDiv.textContent || tempDiv.innerText || '';
+        plainText = stripHtml(html);
       }
 
       this._notifyListeners('write', { type: 'html', data: html, plainText });
       return true;
     } catch (error) {
-      console.warn('Failed to write HTML to clipboard, falling back to text:', error);
       // Fallback to plain text
       return await this.writeText(plainText || this._stripHTML(html));
     }
@@ -69,7 +65,6 @@ class ClipboardManager {
       const html = await invoke('clipboard_read_html');
       return html;
     } catch (error) {
-      console.error('Failed to read HTML from clipboard:', error);
       // Fallback to reading as text
       return await this.readText();
     }
@@ -82,7 +77,6 @@ class ClipboardManager {
     try {
       return await invoke('clipboard_has_text');
     } catch (error) {
-      console.error('Failed to check clipboard text:', error);
       return false;
     }
   }
@@ -96,7 +90,6 @@ class ClipboardManager {
       this._notifyListeners('clear', null);
       return true;
     } catch (error) {
-      console.error('Failed to clear clipboard:', error);
       return false;
     }
   }
@@ -146,7 +139,6 @@ class ClipboardManager {
       
       return false;
     } catch (error) {
-      console.error('Failed to paste to editor:', error);
       return false;
     }
   }
@@ -184,18 +176,15 @@ class ClipboardManager {
       try {
         callback({ type, data, timestamp: Date.now() });
       } catch (error) {
-        console.error('Error in clipboard listener:', error);
       }
     });
   }
 
   /**
-   * Private: Strip HTML tags from string
+   * Private: Strip HTML tags from string (secure)
    */
   _stripHTML(html) {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    return tempDiv.textContent || tempDiv.innerText || '';
+    return stripHtml(html);
   }
 }
 

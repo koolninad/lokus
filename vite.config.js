@@ -13,6 +13,27 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Build configuration
+  build: {
+    // Generate source maps for production (hidden by default, only visible to Sentry)
+    sourcemap: 'hidden',
+    // Improve build performance
+    rollupOptions: {
+      output: {
+        // Manual chunking for better caching
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'sentry': ['@sentry/react'],
+        },
+      },
+    },
+  },
+
+  // Worker configuration
+  worker: {
+    format: 'es', // Use ES modules for workers (required for code-splitting)
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

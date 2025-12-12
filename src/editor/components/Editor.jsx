@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import * as StarterKitExt from "@tiptap/starter-kit";
 import * as PlaceholderExt from "@tiptap/extension-placeholder";
@@ -18,21 +18,102 @@ import * as TableCellExt from "@tiptap/extension-table-cell";
 import * as StrikeExt from "@tiptap/extension-strike";
 import * as HighlightExt from "@tiptap/extension-highlight";
 import * as HorizontalRuleExt from "@tiptap/extension-horizontal-rule";
-import { InputRule } from "@tiptap/core";
+import { InputRule, nodeInputRule } from "@tiptap/core";
 import MathExt from "../extensions/Math.js";
 import WikiLink from "../extensions/WikiLink.js";
 import WikiLinkSuggest from "../lib/WikiLinkSuggest.js";
+import BlockId from "../extensions/BlockId.js";
+import WikiLinkEmbed from "../extensions/WikiLinkEmbed.js";
+import TagAutocomplete from "../extensions/TagAutocomplete.js";
 import HeadingAltInput from "../extensions/HeadingAltInput.js";
 import MarkdownPaste from "../extensions/MarkdownPaste.js";
 import MarkdownTablePaste from "../extensions/MarkdownTablePaste.js";
+import SmartTask from "../extensions/SmartTask.js";
+import SimpleTask from "../extensions/SimpleTask.js";
+import TaskSyntaxHighlight from "../extensions/TaskSyntaxHighlight.js";
+import TaskMentionSuggest from "../extensions/TaskMentionSuggest.js";
+import TaskCreationTrigger from "../extensions/TaskCreationTrigger.js";
+import CodeBlockIndent from "../extensions/CodeBlockIndent.js";
+import Callout from "../extensions/Callout.js";
+import Folding from "../extensions/Folding.js";
+import MermaidDiagram from "../extensions/MermaidDiagram.jsx";
 import liveEditorSettings from "../../core/editor/live-settings.js";
+import WikiLinkModal from "../../components/WikiLinkModal.jsx";
+import TaskCreationModal from "../../components/TaskCreationModal.jsx";
+import ExportModal from "../../views/ExportModal.jsx";
+import ImageInsertModal from "../../components/ImageInsertModal.jsx";
+import MathFormulaModal from "../../components/MathFormulaModal.jsx";
+import ReadingModeView from "./ReadingModeView.jsx";
+import PagePreview from "../../components/PagePreview.jsx";
+import { ImageViewerModal } from "../../components/ImageViewer/ImageViewerModal.jsx";
+import { findImageFiles } from "../../utils/imageUtils.js";
+import { editorAPI } from "../../plugins/api/EditorAPI.js";
+import { pluginAPI } from "../../plugins/api/PluginAPI.js";
 
 import "../styles/editor.css";
+import "../styles/block-embeds.css";
+import "../../styles/page-preview.css";
 
-const Editor = ({ content, onContentChange }) => {
+const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading = false }, ref) => {
   const [extensions, setExtensions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editorSettings, setEditorSettings] = useState(null);
+  const [pluginExtensions, setPluginExtensions] = useState([]);
+  const [lastPluginUpdate, setLastPluginUpdate] = useState(0);
+
+  // Reading mode state: 'edit', 'live', 'reading'
+  const [editorMode, setEditorMode] = useState(() => {
+    // Try to load mode from localStorage
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        const saved = localStorage.getItem(`editor-mode:${activeFile}`);
+        return saved || 'edit';
+      }
+    } catch { }
+    return 'edit';
+  });
+
+  // Listen for plugin extension changes and markdown config changes
+  useEffect(() => {
+    const handlePluginUpdate = () => {
+      const pluginExts = editorAPI.getAllExtensions();
+      setPluginExtensions(pluginExts);
+      setLastPluginUpdate(Date.now());
+    };
+
+    const handleMarkdownConfigChange = () => {
+      setLastPluginUpdate(Date.now());
+    };
+
+    // Listen for plugin registration events
+    const unsubscribeNode = editorAPI.on('node-registered', handlePluginUpdate);
+    const unsubscribeMark = editorAPI.on('mark-registered', handlePluginUpdate);
+    const unsubscribeExt = editorAPI.on('extension-registered', handlePluginUpdate);
+    const unsubscribeUnregister = editorAPI.on('plugin-unregistered', handlePluginUpdate);
+    const unsubscribeHotReload = editorAPI.on('hot-reload-requested', ({ extensions, content: newContent }) => {
+      // Recreate editor with new extensions - this will be handled by the editor recreation logic
+      setLastPluginUpdate(Date.now());
+    });
+
+    // Listen for markdown config changes
+    window.addEventListener('markdown-config-changed', handleMarkdownConfigChange);
+
+    // Initial load of plugin extensions
+    const initialPluginExts = editorAPI.getAllExtensions();
+    if (initialPluginExts.length > 0) {
+      setPluginExtensions(initialPluginExts);
+    }
+
+    return () => {
+      unsubscribeNode();
+      unsubscribeMark();
+      unsubscribeExt();
+      unsubscribeUnregister();
+      unsubscribeHotReload();
+      window.removeEventListener('markdown-config-changed', handleMarkdownConfigChange);
+    };
+  }, []);
 
   useEffect(() => {
     const pick = (ns, named) => ns?.default ?? ns?.[named] ?? null;
@@ -52,32 +133,39 @@ const Editor = ({ content, onContentChange }) => {
     const Highlight = pick(HighlightExt, 'Highlight');
     const HorizontalRule = pick(HorizontalRuleExt, 'HorizontalRule');
 
-    const exts = [StarterKit];
+    const exts = [
+      StarterKit.configure({
+        // Use default codeBlock
+      })
+    ];
     if (Link) exts.push(Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }));
     if (TaskList && TaskItem) exts.push(TaskList, TaskItem);
     if (Image) {
-      exts.push(Image.configure({
+      // Properly extend Image extension to override addInputRules
+      const CustomImage = Image.extend({
+        addInputRules() {
+          return [
+            nodeInputRule({
+              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
+              type: this.type,
+              getAttributes: (match) => {
+                const src = match[2];
+                const alt = match[1];
+                return {
+                  src,
+                  alt
+                };
+              },
+            }),
+          ];
+        },
+      });
+
+      exts.push(CustomImage.configure({
         inline: true,
         allowBase64: true,
         HTMLAttributes: {
           class: 'editor-image',
-        },
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /!\[([^\]]*)\]\(([^)]+)\)$/,
-              handler: ({ state, range, match, chain }) => {
-                const alt = match[1];
-                const src = match[2];
-                // Handle both local paths and web URLs
-                const resolvedSrc = src.startsWith('http') ? src : src;
-                chain().deleteRange(range).insertContent({
-                  type: 'image',
-                  attrs: { src: resolvedSrc, alt: alt || '' }
-                }).run();
-              },
-            }),
-          ];
         },
       }));
     }
@@ -97,7 +185,7 @@ const Editor = ({ content, onContentChange }) => {
         },
       }));
     }
-    
+
     if (Subscript) {
       exts.push(Subscript.extend({
         addInputRules() {
@@ -116,7 +204,7 @@ const Editor = ({ content, onContentChange }) => {
     if (Table && TableRow && TableHeader && TableCell) {
       exts.push(Table.configure({ resizable: true }), TableRow, TableHeader, TableCell);
     }
-    
+
     // Additional formatting extensions
     if (Strike) {
       exts.push(Strike.extend({
@@ -135,9 +223,9 @@ const Editor = ({ content, onContentChange }) => {
     }
     if (Highlight) exts.push(Highlight.configure({ multicolor: true }));
     if (HorizontalRule) exts.push(HorizontalRule);
-    
+
     // Code blocks (basic, StarterKit includes CodeBlock extension)
-    
+
     // Math (inline + block) – local extension
     if (Array.isArray(MathExt)) exts.push(...MathExt)
     else if (MathExt) exts.push(MathExt)
@@ -145,24 +233,58 @@ const Editor = ({ content, onContentChange }) => {
     // Obsidian‑style wikilinks and image embeds
     exts.push(WikiLink);
     exts.push(WikiLinkSuggest);
-    
+
+    // Obsidian-style block IDs (^blockid)
+    exts.push(BlockId);
+
+    // Obsidian-style block embeds (![[File^blockid]])
+    exts.push(WikiLinkEmbed);
+
+    // Tag autocomplete
+    exts.push(TagAutocomplete);
+
     // Markdown paste functionality
     exts.push(MarkdownPaste);
     exts.push(MarkdownTablePaste);
+
+    // Task syntax visual highlighting
+    exts.push(TaskSyntaxHighlight);
+
+    // Task mention autocomplete for @task
+    exts.push(TaskMentionSuggest);
+
+    // Task creation trigger for !task
+    exts.push(TaskCreationTrigger);
+
+    // Code block indentation support (Tab, Shift+Tab, Enter)
+    exts.push(CodeBlockIndent);
+
+    // Callout/Admonition blocks
+    exts.push(Callout);
+
+    // Section folding for headings
+    exts.push(Folding);
+
+    // Mermaid diagrams
+    exts.push(MermaidDiagram);
+
+
+    // Add plugin extensions
+    exts.push(...pluginExtensions);
 
     // Load markdown shortcut prefs and editor settings
     (async () => {
       try {
         const { readConfig } = await import('../../core/config/store.js')
         const cfg = (await readConfig()) || {}
-        
+
         // Load markdown shortcuts
         const hs = cfg.markdownShortcuts?.headingAlt
         const invalid = ['$', '[', '!'] // avoid conflicts with math / wikilinks
         if (hs?.enabled && hs.marker && !invalid.includes(hs.marker)) {
-          exts.push(HeadingAltInput({ marker: hs.marker }))
+          // exts.push(HeadingAltInput({ marker: hs.marker })) // Temporarily disabled
         }
-        
+
         // Load editor settings
         const defaultEditorSettings = {
           font: {
@@ -192,7 +314,7 @@ const Editor = ({ content, onContentChange }) => {
             typewriterMode: false
           }
         };
-        
+
         const editorConfig = cfg.editor || {};
         const mergedSettings = {
           font: { ...defaultEditorSettings.font, ...editorConfig.font },
@@ -200,11 +322,10 @@ const Editor = ({ content, onContentChange }) => {
           behavior: { ...defaultEditorSettings.behavior, ...editorConfig.behavior },
           appearance: { ...defaultEditorSettings.appearance, ...editorConfig.appearance }
         };
-        
+
         setEditorSettings(mergedSettings);
-        
+
       } catch (e) {
-        console.warn('[editor] failed to load configuration:', e)
         // Use defaults if loading fails
         setEditorSettings({
           font: { family: 'ui-sans-serif', size: 16, lineHeight: 1.7, letterSpacing: 0.003 },
@@ -213,64 +334,244 @@ const Editor = ({ content, onContentChange }) => {
           appearance: { showMarkdown: false, focusMode: false, typewriterMode: false }
         });
       }
-      
+
       exts.push(Placeholder.configure({ placeholder: "Press '/' for commands..." }));
       exts.push(SlashCommand);
       setExtensions(exts);
       setLoading(false);
     })()
+  }, [pluginExtensions, lastPluginUpdate]);
+
+  // Persist editor mode changes
+  useEffect(() => {
+    try {
+      const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+      if (activeFile) {
+        localStorage.setItem(`editor-mode:${activeFile}`, editorMode);
+      }
+    } catch { }
+  }, [editorMode]);
+
+  // Keyboard shortcut for cycling modes (Cmd/Ctrl+E)
+  useEffect(() => {
+    const handleModeShortcut = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault();
+        setEditorMode(current => {
+          if (current === 'edit') return 'live';
+          if (current === 'live') return 'reading';
+          return 'edit';
+        });
+      }
+    };
+
+    document.addEventListener('keydown', handleModeShortcut);
+    return () => document.removeEventListener('keydown', handleModeShortcut);
   }, []);
+
+  // Expose editorMode to parent via window global for sidebar access
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__LOKUS_EDITOR_MODE__ = editorMode;
+      window.__LOKUS_SET_EDITOR_MODE__ = setEditorMode;
+    }
+  }, [editorMode]);
 
   if (loading || !extensions || !editorSettings) {
     return <div className="m-5 text-app-muted">Loading editor…</div>;
   }
 
-  return <Tiptap extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} />;
-};
+  return (
+    <Tiptap ref={ref} extensions={extensions} content={content} onContentChange={onContentChange} editorSettings={editorSettings} editorMode={editorMode} onEditorReady={onEditorReady} isLoading={isLoading} />
+  );
+});
 
-function Tiptap({ extensions, content, onContentChange, editorSettings }) {
+const Tiptap = forwardRef(({ extensions, content, onContentChange, editorSettings, editorMode = 'edit', onEditorReady, isLoading = false }, ref) => {
   const isSettingRef = useRef(false);
-  
+  const [isWikiLinkModalOpen, setIsWikiLinkModalOpen] = useState(false);
+  const [isTaskCreationModalOpen, setIsTaskCreationModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [imageViewerState, setImageViewerState] = useState({ isOpen: false, imagePath: null });
+  const [imageInsertModalState, setImageInsertModalState] = useState({ isOpen: false, onInsert: null });
+  const [mathFormulaModalState, setMathFormulaModalState] = useState({ isOpen: false, mode: 'inline', onInsert: null });
+
+  // Page preview state
+  const [previewData, setPreviewData] = useState(null);
+
   // Subscribe to live settings changes for real-time updates
   const [liveSettings, setLiveSettings] = useState(liveEditorSettings.getAllSettings());
-  
+
   useEffect(() => {
     const unsubscribe = liveEditorSettings.onSettingsChange((key, value, allSettings) => {
       setLiveSettings(allSettings);
     });
     return unsubscribe;
   }, []);
-  
+
+  const tagIndexTimeoutRef = useRef(null);
+
   // Memoize callbacks for performance
   const handleEditorUpdate = useCallback(({ editor }) => {
-    if (isSettingRef.current) { 
-      isSettingRef.current = false; 
-      return; 
+    if (isSettingRef.current) {
+      isSettingRef.current = false;
+      return;
     }
     onContentChange(editor.getHTML());
+
+    // Index tags for autocomplete (Debounced 2s)
+    if (tagIndexTimeoutRef.current) clearTimeout(tagIndexTimeoutRef.current);
+
+    tagIndexTimeoutRef.current = setTimeout(() => {
+      try {
+        const activeFile = globalThis.__LOKUS_ACTIVE_FILE__;
+        if (activeFile) {
+          // Import tagManager and index the content
+          import('../../core/tags/tag-manager.js').then(({ default: tagManager }) => {
+            const content = editor.getText();
+            tagManager.indexNote(activeFile, content);
+          });
+        }
+      } catch (error) {
+        console.error('[Editor] Failed to index tags:', error);
+      }
+    }, 2000);
   }, [onContentChange]);
-  
+
   const editor = useEditor({
     extensions,
     shouldRerenderOnTransaction: false,
+    onBeforeCreate: ({ editor }) => {
+      // Set editor instance in the plugin API for hot reloading
+      editorAPI.setEditorInstance(editor);
+    },
+    onCreate: ({ editor }) => {
+      // Update editor instance reference
+      editorAPI.setEditorInstance(editor);
+    },
+    onDestroy: () => {
+      // Clear editor instance reference
+      editorAPI.setEditorInstance(null);
+    },
     editorProps: {
-      attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl m-5 focus:outline-none tiptap-area pb-16 smooth-type" },
+      attributes: { class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none tiptap-area obsidian-editor" },
       handleDOMEvents: {
         click: (view, event) => {
           const t = event.target;
           if (!(t instanceof Element)) return false;
+
+          // Handle image clicks
+          const img = t.closest('img.editor-image');
+          if (img) {
+            event.preventDefault();
+            const src = img.getAttribute('src') || '';
+            if (src) {
+              setImageViewerState({ isOpen: true, imagePath: src });
+            }
+            return true;
+          }
+
+          // Handle wiki-link clicks
           const el = t.closest('[data-type="wiki-link"]');
           if (!el) return false;
           const href = el.getAttribute('href') || '';
+          const target = el.getAttribute('target') || '';
           if (!href) return true;
+
           event.preventDefault();
+
+          // Detect modifier keys for "open in new tab" behavior
+          const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+          const openInNewTab = isMac ? event.metaKey : event.ctrlKey;
+
+
+          // Check if this is a block reference (contains ^)
+          // Check BOTH href and target since target might be empty when loaded from disk
+          const hasBlockRef = (href && href.includes('^')) || (target && target.includes('^'));
+          let blockId = null;
+          let cleanHref = href;  // Clean path without block reference
+
+          if (hasBlockRef) {
+            // Extract blockId from href (format: "/path/to/Filename.md^blockid")
+            const parts = href.split('^');
+            cleanHref = parts[0];  // Remove ^blockid from path
+            blockId = parts[1];    // Get the block ID
+
+          }
+
+          // Check if this is a resolved file path that exists in the index
+          const index = globalThis.__LOKUS_FILE_INDEX__ || [];
+          let fileExists = index.some(f => f.path === cleanHref);
+
+          // If href is not a valid path, try to resolve it using the file index
+          // This handles links created before the file index was populated
+          if (!fileExists && index.length > 0) {
+            let searchTerm = target ? target.split('|')[0].split('^')[0].split('#')[0].trim() : cleanHref;
+            const filename = (p) => (p || '').split(/[\\/]/).pop();
+            const dirname = (p) => {
+              if (!p) return '';
+              const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+              return i >= 0 ? p.slice(0, i) : '';
+            };
+            const wsPath = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
+
+            // Check for explicit root marker (./)
+            const isExplicitRoot = searchTerm.startsWith('./');
+            if (isExplicitRoot) {
+              searchTerm = searchTerm.slice(2);
+              // Find file in workspace root only
+              const rootFile = index.find(f => {
+                const name = filename(f.path);
+                const dir = dirname(f.path);
+                const isInRoot = dir === wsPath || dir === wsPath.replace(/\/$/, '');
+                return isInRoot && (name === searchTerm || name === `${searchTerm}.md`);
+              });
+              if (rootFile) {
+                cleanHref = rootFile.path;
+                fileExists = true;
+              }
+            } else {
+              const hasPath = /[/\\]/.test(searchTerm);
+              const activePath = globalThis.__LOKUS_ACTIVE_FILE__ || '';
+              const activeDir = dirname(activePath);
+
+              // Find all matching files
+              const candidates = index.filter(f => {
+                if (hasPath) {
+                  return f.path.endsWith(searchTerm) ||
+                         f.path.endsWith(`${searchTerm}.md`);
+                }
+                const name = filename(f.path);
+                return name === searchTerm ||
+                       name === `${searchTerm}.md` ||
+                       name.replace('.md', '') === searchTerm;
+              });
+
+              if (candidates.length > 0) {
+                // Prefer file in same folder as current file
+                const sameFolder = candidates.find(f => dirname(f.path) === activeDir);
+                cleanHref = sameFolder ? sameFolder.path : candidates[0].path;
+                fileExists = true;
+              }
+            }
+          }
+
           // Emit to workspace to open file (Tauri or DOM event)
           (async () => {
             try {
               const { emit } = await import('@tauri-apps/api/event');
-              await emit('lokus:open-file', href);
+              // Use different event based on modifier key
+              const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
+              await emit(eventName, cleanHref);  // Use clean path without ^blockid
             } catch {
-              try { window.dispatchEvent(new CustomEvent('lokus:open-file', { detail: href })); } catch {}
+              try {
+                const eventName = openInNewTab ? 'lokus:open-file-new-tab' : 'lokus:open-file';
+                window.dispatchEvent(new CustomEvent(eventName, { detail: cleanHref }));  // Use clean path
+              } catch { }
+            }
+
+            // If block reference, also emit scroll event
+            if (hasBlockRef && blockId) {
+              window.dispatchEvent(new CustomEvent('lokus:scroll-to-block', { detail: blockId }));
             }
           })();
           return true;
@@ -282,20 +583,124 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
   }, [extensions, handleEditorUpdate]);
 
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (editor) onEditorReady(editor);
+    return () => onEditorReady(null);
+  }, [editor, onEditorReady]);
+
+
+  // Keyboard shortcuts and event listeners for WikiLink and Task insertion
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+L: Open WikiLink modal
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        setIsWikiLinkModalOpen(true);
+        return;
+      }
+
+      // Task shortcuts - need editor instance
+      if (!editor) return;
+
+      // Ctrl+Shift+T: Open task creation modal (!task)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'T') {
+        e.preventDefault();
+        setIsTaskCreationModalOpen(true);
+        return;
+      }
+
+      // Ctrl+Shift+K: Insert @task (triggers task mention autocomplete)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault();
+        editor.chain().focus().insertContent('@').run();
+        return;
+      }
+    };
+
+    // Listen for custom event from TaskCreationTrigger extension
+    const handleTaskModalEvent = () => {
+      setIsTaskCreationModalOpen(true);
+    };
+
+    // Listen for wiki link hover events
+    const handleWikiLinkHover = (event) => {
+      const { target, position } = event.detail;
+      setPreviewData({ target, position });
+    };
+
+    const handleWikiLinkHoverEnd = () => {
+      setPreviewData(null);
+    };
+
+    // Listen for image insert modal event
+    const handleImageInsertModalEvent = (event) => {
+      const { onInsert } = event.detail;
+      setImageInsertModalState({ isOpen: true, onInsert });
+    };
+
+    // Listen for math formula modal event
+    const handleMathFormulaModalEvent = (event) => {
+      const { mode, onInsert } = event.detail;
+      setMathFormulaModalState({ isOpen: true, mode, onInsert });
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('lokus:open-task-modal', handleTaskModalEvent);
+    window.addEventListener('wiki-link-hover', handleWikiLinkHover);
+    window.addEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
+    window.addEventListener('open-image-insert-modal', handleImageInsertModalEvent);
+    window.addEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('lokus:open-task-modal', handleTaskModalEvent);
+      window.removeEventListener('wiki-link-hover', handleWikiLinkHover);
+      window.removeEventListener('wiki-link-hover-end', handleWikiLinkHoverEnd);
+      window.removeEventListener('open-image-insert-modal', handleImageInsertModalEvent);
+      window.removeEventListener('open-math-formula-modal', handleMathFormulaModalEvent);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    // Immediately clear when loading starts
+    if (isLoading && editor.getHTML() !== '') {
       isSettingRef.current = true;
+      editor.commands.setContent('');
+      return;
+    }
+
+    // Update when new content arrives
+    if (!isLoading && content !== editor.getHTML()) {
+      isSettingRef.current = true;
+      // Content is already processed in Workspace.jsx, just set it directly
+      // This prevents double markdown-it processing which corrupts custom HTML tags
       editor.commands.setContent(content);
     }
-  }, [content, editor]);
+  }, [content, editor, isLoading]);
+
+  // Expose editor instance to parent component via ref
+  useImperativeHandle(ref, () => ({
+    commands: editor?.commands,
+    chain: () => editor?.chain(),
+    state: editor?.state,
+    view: editor?.view,
+    getHTML: () => editor?.getHTML(),
+    getText: () => editor?.getText(),
+    setContent: (content) => editor?.commands?.setContent(content),
+    insertContent: (content) => editor?.commands?.insertContent(content),
+    focus: () => editor?.commands?.focus(),
+    editor
+  }), [editor]);
 
   const showDebug = useMemo(() => {
-    try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch {}
+    try { const p = new URLSearchParams(window.location.search); if (p.get('dev') === '1') return true; } catch { }
     try { return !!import.meta?.env?.DEV; } catch { return false; }
   }, []);
 
   async function waitForCommand(cmd, { interval = 100, timeout = 5000 } = {}) {
     const start = Date.now();
-    for (;;) {
+    for (; ;) {
       if (editor?.commands?.[cmd]) return true;
       if (Date.now() - start >= timeout) return false;
       await new Promise(r => setTimeout(r, interval));
@@ -334,27 +739,61 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
       case 'redo':
         editor.commands.redo();
         break;
+      case 'toggleBold':
+        editor.chain().focus().toggleBold().run();
+        break;
+      case 'toggleItalic':
+        editor.chain().focus().toggleItalic().run();
+        break;
+      case 'toggleStrikethrough':
+        editor.chain().focus().toggleStrike().run();
+        break;
+      case 'toggleCode':
+        editor.chain().focus().toggleCode().run();
+        break;
+      case 'clearFormatting':
+        editor.chain().focus().clearNodes().unsetAllMarks().run();
+        break;
+      case 'setHeading':
+        if (data?.level) {
+          editor.chain().focus().setHeading({ level: data.level }).run();
+        }
+        break;
+      case 'setParagraph':
+        editor.chain().focus().setParagraph().run();
+        break;
+      case 'toggleBulletList':
+        editor.chain().focus().toggleBulletList().run();
+        break;
+      case 'toggleOrderedList':
+        editor.chain().focus().toggleOrderedList().run();
+        break;
+      case 'toggleTaskList':
+        editor.chain().focus().toggleTaskList().run();
+        break;
       case 'find':
-        // TODO: Implement find functionality
-        console.log('Find in editor');
+        // Trigger in-file search
+        window.dispatchEvent(new CustomEvent('lokus:toggle-search'));
         break;
       case 'findAndReplace':
-        // TODO: Implement find and replace
-        console.log('Find and replace in editor');
+        // Trigger in-file search with replace mode
+        window.dispatchEvent(new CustomEvent('lokus:toggle-search', { detail: { replaceMode: true } }));
         break;
       case 'commandPalette':
         // Dispatch event to open command palette
-        try {
-          window.dispatchEvent(new CustomEvent('lokus:command-palette'));
-        } catch (e) {
-          console.log('Command palette action');
-        }
+        window.dispatchEvent(new CustomEvent('lokus:command-palette'));
         break;
       case 'insertTable':
         insertTestTable();
         break;
       case 'insertCodeBlock':
         editor.commands.setCodeBlock();
+        break;
+      case 'insertQuote':
+        editor.chain().focus().toggleBlockquote().run();
+        break;
+      case 'insertHorizontalRule':
+        editor.chain().focus().setHorizontalRule().run();
         break;
       case 'insertLink':
         const url = window.prompt('Enter URL:');
@@ -363,28 +802,134 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
         }
         break;
       case 'insertImage':
-        const imageUrl = window.prompt('Enter image URL:');
-        if (imageUrl) {
-          editor.commands.setImage({ src: imageUrl });
-        }
+        // Open image insert modal
+        setImageInsertModalState({
+          isOpen: true,
+          onInsert: ({ src, alt }) => {
+            editor.commands.setImage({ src, alt });
+          }
+        });
         break;
       case 'exportMarkdown':
-        // TODO: Implement markdown export
-        console.log('Export as markdown');
-        break;
       case 'exportHTML':
-        // TODO: Implement HTML export  
-        console.log('Export as HTML');
+      case 'exportPDF':
+        // Open export modal
+        setIsExportModalOpen(true);
         break;
       case 'importFile':
-        // TODO: Implement file import
-        console.log('Import file');
+        // Trigger file import dialog
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.md,.txt,.html';
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const text = await file.text();
+            editor.commands.setContent(text);
+          }
+        };
+        input.click();
+        break;
+      case 'copyBlockReference':
+        (async () => {
+          try {
+            // Get current block
+            const { state } = editor
+            const { $from } = state.selection
+            const node = $from.parent
+
+            // Import dynamically to avoid circular dependencies
+            const blockIdManager = (await import('../../core/blocks/block-id-manager.js')).default
+            const { queueBlockIdWrite } = await import('../../core/blocks/block-writer.js')
+
+            // Check if block has ID
+            let blockId = node.attrs.blockId
+
+            if (!blockId) {
+              // Generate new ID
+              blockId = blockIdManager.generateId()
+
+              // Add to node
+              const pos = $from.before($from.depth)
+              editor.chain()
+                .focus()
+                .command(({ tr }) => {
+                  tr.setNodeMarkup(pos, null, { ...node.attrs, blockId })
+                  return true
+                })
+                .run()
+
+              // Write back to file (if activeFile is available)
+              if (typeof window !== 'undefined' && window.__LOKUS_ACTIVE_FILE__) {
+                const activeFile = window.__LOKUS_ACTIVE_FILE__
+
+                // Calculate line number from position
+                let lineNumber = 1
+                state.doc.nodesBetween(0, pos, (node, pos) => {
+                  if (node.isBlock) lineNumber++
+                })
+
+                queueBlockIdWrite(activeFile, lineNumber, blockId)
+                  .then((success) => {
+                    if (success) {
+                      blockIdManager.invalidateFile(activeFile)
+                    }
+                  })
+                  .catch(err => {
+                    console.error('[Editor] Error writing block ID:', err)
+                  })
+              }
+            }
+
+            // Format reference
+            const activeFile = window.__LOKUS_ACTIVE_FILE__ || ''
+            const fileName = activeFile.split('/').pop()?.replace('.md', '') || 'Unknown'
+            const reference = `[[${fileName}^${blockId}]]`
+
+            // Copy to clipboard
+            await navigator.clipboard.writeText(reference)
+
+            // Optional: Show toast notification (if you have a toast system)
+            // toast.success('Block reference copied to clipboard')
+          } catch (error) {
+            console.error('[Editor] Error copying block reference:', error)
+          }
+        })()
         break;
       default:
-        console.log('Unhandled editor action:', action);
     }
   };
 
+  // WikiLink modal handlers
+  const handleSelectFile = useCallback((file) => {
+    if (editor) {
+      // Use the WikiLink command to create a proper link node
+      const raw = `${file.path}|${file.name}`;
+      editor.commands.setWikiLink(raw, { embed: false });
+    }
+  }, [editor]);
+
+  // Task creation handler
+  const handleCreateTask = useCallback(({ boardName, columnName, taskName }) => {
+    if (editor) {
+      // Insert the task mention in the correct format: @task[BoardName:TaskTitle]
+      editor.chain().focus().insertContent(`@task[${boardName}:${taskName}] `).run();
+    }
+  }, [editor]);
+
+  // Reading mode - show non-editable HTML view
+  if (editorMode === 'reading') {
+    return (
+      <ReadingModeView
+        content={editor?.getHTML() || content}
+        editorSettings={editorSettings}
+      />
+    );
+  }
+
+
+  // Edit and Live Preview modes - show TipTap editor
+  // In live mode, we keep editor editable but could add visual hints
   return (
     <>
       {editor && showDebug && (
@@ -393,16 +938,87 @@ function Tiptap({ extensions, content, onContentChange, editorSettings }) {
         </div>
       )}
       {editor && <TableBubbleMenu editor={editor} />}
-      <EditorContextMenu 
+      <EditorContextMenu
         onAction={handleEditorAction}
         hasSelection={editor?.state?.selection && !editor.state.selection.empty}
         canUndo={editor?.can().undo()}
         canRedo={editor?.can().redo()}
       >
-        <EditorContent editor={editor} />
+        <EditorContent
+          editor={editor}
+          className={editorMode === 'live' ? 'live-preview-mode' : ''}
+        />
       </EditorContextMenu>
+
+      {/* WikiLink Modal */}
+      <WikiLinkModal
+        isOpen={isWikiLinkModalOpen}
+        onClose={() => setIsWikiLinkModalOpen(false)}
+        onSelectFile={handleSelectFile}
+        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+        currentFile={globalThis.__LOKUS_ACTIVE_FILE__}
+      />
+
+      {/* Task Creation Modal */}
+      <TaskCreationModal
+        isOpen={isTaskCreationModalOpen}
+        onClose={() => setIsTaskCreationModalOpen(false)}
+        onCreateTask={handleCreateTask}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        htmlContent={editor?.getHTML()}
+        currentFile={{
+          name: globalThis.__LOKUS_ACTIVE_FILE__?.name || 'untitled',
+          path: globalThis.__LOKUS_ACTIVE_FILE__?.path,
+        }}
+        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+        exportType="single"
+      />
+
+      {/* Page Preview on Hover */}
+      {previewData && (
+        <PagePreview
+          target={previewData.target}
+          position={previewData.position}
+          onClose={() => setPreviewData(null)}
+        />
+      )}
+
+      {/* Image Viewer Modal */}
+      <ImageViewerModal
+        isOpen={imageViewerState.isOpen}
+        imagePath={imageViewerState.imagePath}
+        allImageFiles={globalThis.__LOKUS_ALL_IMAGE_FILES__ || []}
+        onClose={() => setImageViewerState({ isOpen: false, imagePath: null })}
+      />
+
+      {/* Image Insert Modal */}
+      <ImageInsertModal
+        isOpen={imageInsertModalState.isOpen}
+        onClose={() => setImageInsertModalState({ isOpen: false, onInsert: null })}
+        onInsert={(data) => {
+          imageInsertModalState.onInsert?.(data);
+          setImageInsertModalState({ isOpen: false, onInsert: null });
+        }}
+        workspacePath={globalThis.__LOKUS_WORKSPACE_PATH__}
+      />
+
+      {/* Math Formula Modal */}
+      <MathFormulaModal
+        isOpen={mathFormulaModalState.isOpen}
+        mode={mathFormulaModalState.mode}
+        onClose={() => setMathFormulaModalState({ isOpen: false, mode: 'inline', onInsert: null })}
+        onInsert={(data) => {
+          mathFormulaModalState.onInsert?.(data);
+          setMathFormulaModalState({ isOpen: false, mode: 'inline', onInsert: null });
+        }}
+      />
     </>
   );
-}
+});
 
 export default Editor;

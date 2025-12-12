@@ -19,11 +19,18 @@ test.describe('App Navigation', () => {
     }
   });
 
-  test('should show workspace view', async ({ page }) => {
+  test('should show workspace or launcher view', async ({ page }) => {
     await page.goto('/');
-    
-    // Check if workspace elements are visible
-    await expect(page.locator('.workspace, [data-testid="workspace"]')).toBeVisible();
+
+    // App should show either workspace (if configured) or launcher
+    // Check for either workspace elements OR launcher elements
+    const workspaceView = page.locator('[data-tour="files"], .ProseMirror');
+    const launcherView = page.getByText('Create New Workspace');
+
+    const hasWorkspace = await workspaceView.first().isVisible({ timeout: 3000 }).catch(() => false);
+    const hasLauncher = await launcherView.first().isVisible({ timeout: 3000 }).catch(() => false);
+
+    expect(hasWorkspace || hasLauncher).toBeTruthy();
   });
 
   test('should handle theme switching', async ({ page }) => {

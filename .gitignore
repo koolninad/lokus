@@ -11,6 +11,8 @@ pnpm-lock.yaml
 .env.*
 !.env.example
 
+r/*
+
 # Build outputs
 dist/
 dist-ssr/
@@ -75,3 +77,70 @@ coverage/
 *.temp
 /tmp/
 temp/
+
+# Test workspace (user testing area - not part of codebase)
+Lokus-Full-Scale-Test/
+/Lokus-Full-Scale-Test/
+
+# MCP server test files
+test-mcp-server.js
+test-simple-mcp.js
+test-complete-mcp.js
+
+# Generated API documentation
+openapi.yaml
+
+# User workspace state file
+.lokus-active-workspaces.json
+
+
+# Personal files
+*_internship_emails.md
+*summer_*.md
+*personal*.md
+*internship*.md
+*research*.md
+*NSF*.md
+*REU*.md
+test-email*.md
+*-email*.md
+
+# Temporary documentation files
+*ANSWER_*.md
+*FIX_*.md
+*TEST_*.md
+*TRANSPORT_*.md
+*VERIFICATION_*.md
+*QUANTUM_*.md
+*PERFORMANCE_*.md
+*LOKUS_QUANTUM*.md
+Progress.md
+*DOCUMENTATION_UPDATE*.md
+*DUAL_CONFIG*.md
+*AUTO_START*.md
+
+# Backup and old files
+*.bak
+*-old.*
+*-backup.*
+*.backup
+
+# Date-stamped temporary files
+20[0-9][0-9]-*-*.txt
+20[0-9][0-9]-*-*.md
+
+# AI Assistant
+.claude/
+*.claude
+
+# Personal VS Code settings (keep only extensions.json)
+.vscode/*
+!.vscode/extensions.json
+
+# Dev Container
+# Keep .devcontainer/ directory committed, but ignore any local overrides
+.devcontainer/.env
+.devcontainer/*.local.*
+
+nul
+Guide-To-Fix-Domain.md

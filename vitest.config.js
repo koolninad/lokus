@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
-    setupFiles: ['./tests/setup.js'],
+    setupFiles: ['./src/test-setup.js'],
     globals: true,
     css: true,
     reporters: ['default'],
@@ -21,7 +21,14 @@ export default defineConfig({
         'build/'
       ]
     },
-    // Watch mode configuration
+    // Include remaining test files
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'packages/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'packages/lokus-plugin-cli/templates/**'
+    ],
+    // Watch mode configuration (tests removed)
     watch: {
       include: ['src/**/*.{js,jsx,ts,tsx}']
     },

@@ -1,5 +1,6 @@
 import { Editor } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
+import { logger } from "../../utils/logger.js";
 import {
   Heading1,
   Heading2,
@@ -18,10 +19,23 @@ import {
   Strikethrough,
   Highlighter,
   Minus,
+  FileText,
+  Link,
+  Mail,
+  Send,
+  Kanban,
+  CheckSquare,
+  Info,
+  Lightbulb,
+  AlertTriangle,
+  AlertCircle,
+  HelpCircle,
+  BookOpen,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
 import SlashCommandList from "../components/SlashCommandList";
+import { editorAPI } from "../../plugins/api/EditorAPI.js";
 
 // Keep track of the current reference rect so we can open sub‑popovers
 let lastClientRect = null;
@@ -41,14 +55,12 @@ function waitForCommand(editor, key, { interval = 100, timeout = 2000 } = {}) {
 async function runWhenReady(editor, key, run, options) {
   const ok = await waitForCommand(editor, key, options);
   if (!ok) {
-    console.warn(`[slash] Command '${key}' not available in time`);
     return false;
   }
   try {
     run();
     return true;
   } catch (e) {
-    console.warn(`[slash] Failed running '${key}':`, e);
     return false;
   }
 }
@@ -61,13 +73,481 @@ function buildTableHTML(rows, cols, withHeaderRow = true) {
   return `<table>${thead}<tbody>${body}</tbody></table>`;
 }
 
+function openTemplatePicker({ editor, range }) {
+  logger.debug('SlashCommand', 'Opening template picker via event');
+  // Store current editor state for template insertion
+  const editorState = { editor, range };
+
+  // Dispatch custom event to open template picker
+  window.dispatchEvent(new CustomEvent('open-template-picker', {
+    detail: {
+      editorState,
+      onSelect: (template, processedContent) => {
+        logger.debug('SlashCommand', 'Template selected:', template?.name);
+        try {
+          // Insert the processed template content
+          editor.chain().focus().deleteRange(range).insertContent(processedContent).run();
+        } catch (err) {
+          logger.error('SlashCommand', 'Error inserting template:', err);
+          // Fallback: insert raw template content
+          editor.chain().focus().deleteRange(range).insertContent(template.content).run();
+        }
+      }
+    }
+  }));
+}
+
+function openFileLinkPicker({ editor, range }) {
+
+  try {
+    // Get file index for suggestions
+    const getIndex = () => {
+      const list = (globalThis.__LOKUS_FILE_INDEX__ || [])
+      return Array.isArray(list) ? list : []
+    };
+
+    const files = getIndex();
+
+    if (files.length === 0) {
+      // No files available, just insert empty wiki link
+      editor.chain().focus().deleteRange(range).insertContent('[[]]').run();
+      return;
+    }
+
+    // Create file picker UI
+    createFilePicker(files, (selectedFile) => {
+      if (selectedFile) {
+        // Insert the selected file as wiki link
+        const linkText = `[[${selectedFile.title}]]`;
+        editor.chain().focus().deleteRange(range).insertContent(linkText).run();
+      }
+    });
+
+  } catch (error) {
+    // Fallback: just insert something
+    try {
+      editor.chain().focus().deleteRange(range).insertContent('[[Link]]').run();
+    } catch (fallbackError) {
+    }
+  }
+}
+
+function getCurrentFileName() {
+  // Get the current file name from the workspace context
+  try {
+    const activeFile = window.__LOKUS_ACTIVE_FILE__;
+    if (activeFile) {
+      // Extract filename from full path and remove extension
+      const fileName = activeFile.split('/').pop() || 'Untitled';
+      return fileName.replace(/\.[^/.]+$/, ''); // Remove extension (.md, .txt, etc.)
+    }
+    return 'Untitled';
+  } catch (error) {
+    return 'Untitled';
+  }
+}
+
+function createGmailTemplate({ editor, range }) {
+  const fileName = getCurrentFileName();
+
+  const template = `---
+To:
+Subject: ${fileName}
+---
+
+<!-- Write your email body here -->
+
+`;
+
+  editor.chain().focus().deleteRange(range).insertContent(template).run();
+}
+
+// Kanban helper functions
+async function getKanbanBoards() {
+  try {
+    if (typeof window !== 'undefined' && window.__TAURI__) {
+      const { invoke } = window.__TAURI__.tauri;
+      const boards = await invoke('list_kanban_boards');
+      return boards || [];
+    }
+  } catch (error) {
+    logger.error('SlashCommand', 'Failed to get kanban boards:', error);
+  }
+  return [];
+}
+
+function createKanbanBoardPicker({ editor, range, onInsertTask = false }) {
+  console.log('[SlashCommand] createKanbanBoardPicker called');
+  getKanbanBoards().then(boards => {
+    console.log('[SlashCommand] getKanbanBoards returned:', boards);
+    if (boards.length === 0) {
+      // No boards, prompt to create one
+      const boardName = window.prompt('No kanban boards found. Create a new board:');
+      if (boardName && boardName.trim()) {
+        if (onInsertTask) {
+          editor.chain().focus().deleteRange(range).insertContent(`@task[${boardName.trim()}] `).run();
+        } else {
+          // Just create the board
+          if (typeof window !== 'undefined' && window.__TAURI__) {
+            const { invoke } = window.__TAURI__.tauri;
+            invoke('create_kanban_board', { name: boardName.trim() })
+              .then(() => {
+                logger.debug('SlashCommand', 'Created kanban board:', boardName.trim());
+              })
+              .catch(err => logger.error('SlashCommand', 'Failed to create board:', err));
+          }
+        }
+      }
+      return;
+    }
+
+    console.log('[SlashCommand] Boards found, creating picker UI');
+
+    // Create board picker UI
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      backdrop-filter: blur(4px);
+    `;
+
+    // Define cleanup function early so it can be used in event handlers
+    const cleanup = () => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    };
+
+    const picker = document.createElement('div');
+    picker.style.cssText = `
+      background: rgb(var(--panel));
+      border: 1px solid rgb(var(--border));
+      border-radius: 12px;
+      width: 500px;
+      max-height: 600px;
+      overflow: hidden;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    `;
+
+    const header = document.createElement('div');
+    header.style.cssText = `
+      padding: 16px 20px;
+      border-bottom: 1px solid rgb(var(--border));
+      background: rgb(var(--bg));
+    `;
+    header.innerHTML = `
+      <h3 style="margin: 0; color: rgb(var(--text)); font-size: 16px; font-weight: 600;">
+        ${onInsertTask ? 'Select Board for Task' : 'Open Kanban Board'}
+      </h3>
+      <p style="margin: 4px 0 0 0; color: rgb(var(--muted)); font-size: 14px;">
+        ${onInsertTask ? 'Choose a board to link your task to' : 'Choose a board to open'}
+      </p>
+    `;
+
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = `
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 8px 0;
+    `;
+
+    boards.forEach((board) => {
+      const item = document.createElement('div');
+      item.style.cssText = `
+        padding: 12px 20px;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(var(--border), 0.5);
+        transition: background-color 0.15s ease;
+      `;
+
+      item.innerHTML = `
+        <div style="color: rgb(var(--text)); font-size: 14px; font-weight: 500;">
+          ${board}
+        </div>
+      `;
+
+      item.addEventListener('mouseenter', () => {
+        item.style.backgroundColor = 'rgba(var(--accent), 0.1)';
+      });
+
+      item.addEventListener('mouseleave', () => {
+        item.style.backgroundColor = 'transparent';
+      });
+
+      item.addEventListener('click', () => {
+        if (onInsertTask) {
+          editor.chain().focus().deleteRange(range).insertContent(`@task[${board}] `).run();
+        } else {
+          // Open the board file
+          window.dispatchEvent(new CustomEvent('lokus:open-file', {
+            detail: { path: `kanban/${board}.kanban` }
+          }));
+        }
+        cleanup();
+      });
+
+      listContainer.appendChild(item);
+    });
+
+    const footer = document.createElement('div');
+    footer.style.cssText = `
+      padding: 12px 20px;
+      border-top: 1px solid rgb(var(--border));
+      background: rgb(var(--bg));
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    `;
+
+    const createBtn = document.createElement('button');
+    createBtn.textContent = '+ New Board';
+    createBtn.style.cssText = `
+      background: rgb(var(--accent));
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    `;
+
+    createBtn.addEventListener('click', () => {
+      cleanup();
+      const boardName = window.prompt('Create new kanban board:');
+      if (boardName && boardName.trim()) {
+        if (onInsertTask) {
+          editor.chain().focus().deleteRange(range).insertContent(`@task[${boardName.trim()}] `).run();
+        }
+        if (typeof window !== 'undefined' && window.__TAURI__) {
+          const { invoke } = window.__TAURI__.tauri;
+          invoke('create_kanban_board', { name: boardName.trim() })
+            .then(() => {
+              logger.debug('SlashCommand', 'Created kanban board:', boardName.trim());
+            })
+            .catch(err => logger.error('SlashCommand', 'Failed to create board:', err));
+        }
+      }
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = `
+      background: transparent;
+      border: 1px solid rgb(var(--border));
+      color: rgb(var(--muted));
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    `;
+
+    cancelBtn.addEventListener('click', cleanup);
+
+    footer.appendChild(createBtn);
+    footer.appendChild(cancelBtn);
+
+    picker.appendChild(header);
+    picker.appendChild(listContainer);
+    picker.appendChild(footer);
+    overlay.appendChild(picker);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup();
+    });
+
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape') {
+        cleanup();
+        document.removeEventListener('keydown', handleKeydown);
+      }
+    };
+    document.addEventListener('keydown', handleKeydown);
+  }).catch(error => {
+    console.error('[SlashCommand] createKanbanBoardPicker error:', error);
+  });
+}
+
+function createFilePicker(files, onSelect) {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+  `;
+
+  // Create picker container
+  const picker = document.createElement('div');
+  picker.style.cssText = `
+    background: rgb(var(--panel));
+    border: 1px solid rgb(var(--border));
+    border-radius: 12px;
+    width: 500px;
+    max-height: 600px;
+    overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  `;
+
+  // Create header
+  const header = document.createElement('div');
+  header.style.cssText = `
+    padding: 16px 20px;
+    border-bottom: 1px solid rgb(var(--border));
+    background: rgb(var(--bg));
+  `;
+  header.innerHTML = `
+    <h3 style="margin: 0; color: rgb(var(--text)); font-size: 16px; font-weight: 600;">
+      Select File to Link
+    </h3>
+    <p style="margin: 4px 0 0 0; color: rgb(var(--muted)); font-size: 14px;">
+      Choose a file from your workspace
+    </p>
+  `;
+
+  // Create file list container
+  const listContainer = document.createElement('div');
+  listContainer.style.cssText = `
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 8px 0;
+  `;
+
+  // Create file items
+  files.forEach((file, index) => {
+    const item = document.createElement('div');
+    item.style.cssText = `
+      padding: 12px 20px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(var(--border), 0.5);
+      transition: background-color 0.15s ease;
+    `;
+
+    // Get relative path (remove workspace path)
+    const getRelativePath = (fullPath) => {
+      const workspace = globalThis.__LOKUS_WORKSPACE_PATH__ || '';
+      if (workspace && fullPath.startsWith(workspace)) {
+        return fullPath.slice(workspace.length).replace(/^\//, '');
+      }
+      return fullPath;
+    };
+
+    const relativePath = getRelativePath(file.path);
+
+    item.innerHTML = `
+      <div style="color: rgb(var(--text)); font-size: 14px; font-weight: 500; margin-bottom: 2px;">
+        ${file.title}
+      </div>
+      <div style="color: rgb(var(--muted)); font-size: 12px;">
+        ${relativePath}
+      </div>
+    `;
+
+    // Hover effect
+    item.addEventListener('mouseenter', () => {
+      item.style.backgroundColor = 'rgba(var(--accent), 0.1)';
+    });
+
+    item.addEventListener('mouseleave', () => {
+      item.style.backgroundColor = 'transparent';
+    });
+
+    // Click handler
+    item.addEventListener('click', () => {
+      onSelect(file);
+      cleanup();
+    });
+
+    listContainer.appendChild(item);
+  });
+
+  // Create footer
+  const footer = document.createElement('div');
+  footer.style.cssText = `
+    padding: 12px 20px;
+    border-top: 1px solid rgb(var(--border));
+    background: rgb(var(--bg));
+    text-align: right;
+  `;
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = `
+    background: transparent;
+    border: 1px solid rgb(var(--border));
+    color: rgb(var(--muted));
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  `;
+
+  cancelBtn.addEventListener('click', () => {
+    onSelect(null);
+    cleanup();
+  });
+
+  footer.appendChild(cancelBtn);
+
+  // Assemble picker
+  picker.appendChild(header);
+  picker.appendChild(listContainer);
+  picker.appendChild(footer);
+  overlay.appendChild(picker);
+
+  // Add to DOM
+  document.body.appendChild(overlay);
+
+  // Cleanup function
+  const cleanup = () => {
+    if (overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+  };
+
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      onSelect(null);
+      cleanup();
+    }
+  });
+
+  // Close on escape
+  const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+      onSelect(null);
+      cleanup();
+      document.removeEventListener('keydown', handleKeydown);
+    }
+  };
+  document.addEventListener('keydown', handleKeydown);
+}
+
 function openTableSizePicker({ editor, range }) {
   // If table not ready, wait briefly and insert default; if we can't position a picker, also insert default.
   if (!lastClientRect) {
     try {
       const html = buildTableHTML(3, 3, true);
       editor.chain().focus().deleteRange(range).insertContent(html).run();
-    } catch {}
+    } catch { }
     return;
   }
 
@@ -134,8 +614,8 @@ function openTableSizePicker({ editor, range }) {
     try {
       const html = buildTableHTML(hoverRows, hoverCols, true);
       editor.chain().focus().deleteRange(range).insertContent(html).run();
-    } catch {}
-    try { pick.destroy(); } catch {}
+    } catch { }
+    try { pick.destroy(); } catch { }
   };
   grid.addEventListener('click', doInsert);
 
@@ -147,7 +627,7 @@ function openTableSizePicker({ editor, range }) {
     interactive: true,
     trigger: 'manual',
     placement: 'bottom-start',
-    onHidden: (inst) => { try { inst.destroy(); } catch {} },
+    onHidden: (inst) => { try { inst.destroy(); } catch { } },
   });
 
   // Initial paint so the palette uses 1×1 by default hover
@@ -156,6 +636,42 @@ function openTableSizePicker({ editor, range }) {
 
 const commandItems = [
   {
+    group: "Tasks & Kanban",
+    commands: [
+      {
+        title: "Kanban Board",
+        description: "Open or create a kanban board.",
+        icon: <Kanban size={18} />,
+        command: ({ editor, range }) => {
+          try {
+            console.log('[SlashCommand] Kanban Board command triggered');
+            createKanbanBoardPicker({ editor, range, onInsertTask: false });
+          } catch (e) {
+            console.error('[SlashCommand] Kanban Board command FAILED:', e);
+          }
+        },
+      },
+      {
+        title: "Linked Task",
+        description: "Create task linked to kanban board.",
+        icon: <CheckSquare size={18} />,
+        command: ({ editor, range }) => {
+          console.log('[SlashCommand] Linked Task command triggered');
+          createKanbanBoardPicker({ editor, range, onInsertTask: true });
+        },
+      },
+      {
+        title: "Simple Task",
+        description: "Create standalone task (!task).",
+        icon: <ListTodo size={18} />,
+        command: ({ editor, range }) => {
+          console.log('[SlashCommand] Simple Task command triggered');
+          editor.chain().focus().deleteRange(range).insertContent('!task ').run();
+        },
+      },
+    ],
+  },
+  {
     group: "Basic Blocks",
     commands: [
       {
@@ -163,6 +679,7 @@ const commandItems = [
         description: "Big section heading.",
         icon: <Heading1 size={18} />,
         command: ({ editor, range }) => {
+          console.log('[SlashCommand] Heading 1 command triggered');
           editor.chain().focus().deleteRange(range).setNode("heading", { level: 1 }).run();
         },
       },
@@ -189,13 +706,44 @@ const commandItems = [
         description: "Insert an image by URL.",
         icon: <ImageIcon size={18} />,
         command: ({ editor, range }) => {
-          const url = window.prompt('Image URL');
-          if (!url) return;
-          if (editor?.commands?.setImage) {
-            editor.chain().focus().deleteRange(range).setImage({ src: url }).run();
-          } else {
-            editor.chain().focus().deleteRange(range).insertContent(`<img src="${url}" alt="" />`).run();
-          }
+          // Dispatch event to open image insert modal
+          window.dispatchEvent(new CustomEvent('open-image-insert-modal', {
+            detail: {
+              editor,
+              range,
+              onInsert: ({ src, alt }) => {
+                if (editor?.commands?.setImage) {
+                  editor.chain().focus().deleteRange(range).setImage({ src, alt }).run();
+                } else {
+                  editor.chain().focus().deleteRange(range).insertContent(`<img src="${src}" alt="${alt || ''}" />`).run();
+                }
+              }
+            }
+          }));
+        },
+      },
+      {
+        title: "Template",
+        description: "Insert a template with variables.",
+        icon: <FileText size={18} />,
+        command: ({ editor, range }) => {
+          openTemplatePicker({ editor, range });
+        },
+      },
+      {
+        title: "Link to File",
+        description: "Create a wiki link to another file.",
+        icon: <Link size={18} />,
+        command: ({ editor, range }) => {
+          openFileLinkPicker({ editor, range });
+        },
+      },
+      {
+        title: "Load Gmail",
+        description: "Create an email template with file name as subject.",
+        icon: <Mail size={18} />,
+        command: ({ editor, range }) => {
+          createGmailTemplate({ editor, range });
         },
       },
       {
@@ -328,6 +876,91 @@ const commandItems = [
     ],
   },
   {
+    group: "Callouts",
+    commands: [
+      {
+        title: "Note Callout",
+        description: "Insert a note callout block.",
+        icon: <Info size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'note' }).run();
+          }
+        },
+      },
+      {
+        title: "Tip Callout",
+        description: "Insert a tip callout block.",
+        icon: <Lightbulb size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'tip' }).run();
+          }
+        },
+      },
+      {
+        title: "Warning Callout",
+        description: "Insert a warning callout block.",
+        icon: <AlertTriangle size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'warning' }).run();
+          }
+        },
+      },
+      {
+        title: "Danger Callout",
+        description: "Insert a danger callout block.",
+        icon: <AlertCircle size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'danger' }).run();
+          }
+        },
+      },
+      {
+        title: "Info Callout",
+        description: "Insert an info callout block.",
+        icon: <Info size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'info' }).run();
+          }
+        },
+      },
+      {
+        title: "Success Callout",
+        description: "Insert a success callout block.",
+        icon: <CheckSquare size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'success' }).run();
+          }
+        },
+      },
+      {
+        title: "Question Callout",
+        description: "Insert a question callout block.",
+        icon: <HelpCircle size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'question' }).run();
+          }
+        },
+      },
+      {
+        title: "Example Callout",
+        description: "Insert an example callout block.",
+        icon: <BookOpen size={18} />,
+        command: ({ editor, range }) => {
+          if (editor?.commands?.setCallout) {
+            editor.chain().focus().deleteRange(range).setCallout({ type: 'example' }).run();
+          }
+        },
+      },
+    ],
+  },
+  {
     group: "Math",
     commands: [
       {
@@ -335,14 +968,23 @@ const commandItems = [
         description: "Insert $x^2$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Enter LaTeX formula:', 'E = mc^2')
-          if (src != null && src.trim()) {
-            if (editor?.commands?.setMathInline) {
-              editor.chain().focus().deleteRange(range).setMathInline(src.trim()).run()
-            } else {
-              editor.chain().focus().deleteRange(range).insertContent(`$${src.trim()}$`).run()
+          // Dispatch event to open math formula modal
+          window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
+            detail: {
+              mode: 'inline',
+              editor,
+              range,
+              onInsert: ({ formula }) => {
+                if (editor?.commands?.setMathInline) {
+                  editor.chain().focus().deleteRange(range).setMathInline(formula).run();
+                } else {
+                  // Fallback: insert as math node HTML
+                  const html = `<span data-type="math-inline" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</span>`;
+                  editor.chain().focus().deleteRange(range).insertContent(html).run();
+                }
+              }
             }
-          }
+          }));
         },
       },
       {
@@ -350,14 +992,23 @@ const commandItems = [
         description: "Insert $$E=mc^2$$ (LaTeX).",
         icon: <Sigma size={18} />,
         command: ({ editor, range }) => {
-          const src = window.prompt('Enter LaTeX formula:', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
-          if (src != null && src.trim()) {
-            if (editor?.commands?.setMathBlock) {
-              editor.chain().focus().deleteRange(range).setMathBlock(src.trim()).run()
-            } else {
-              editor.chain().focus().deleteRange(range).insertContent(`$$${src.trim()}$$`).run()
+          // Dispatch event to open math formula modal
+          window.dispatchEvent(new CustomEvent('open-math-formula-modal', {
+            detail: {
+              mode: 'block',
+              editor,
+              range,
+              onInsert: ({ formula }) => {
+                if (editor?.commands?.setMathBlock) {
+                  editor.chain().focus().deleteRange(range).setMathBlock(formula).run();
+                } else {
+                  // Fallback: insert as math block node HTML
+                  const html = `<div data-type="math-block" data-src="${formula.replace(/"/g, '&quot;')}">${formula}</div>`;
+                  editor.chain().focus().deleteRange(range).insertContent(html).run();
+                }
+              }
             }
-          }
+          }));
         },
       },
     ],
@@ -366,15 +1017,67 @@ const commandItems = [
 
 const slashCommand = {
   items: ({ query, editor }) => {
-    const matches = (title) => title.toLowerCase().startsWith(query.toLowerCase());
+    // If no query, show all commands
+    if (!query || !query.trim()) {
+      const pluginCommandGroups = editorAPI.getSlashCommands();
+      return [...commandItems, ...pluginCommandGroups];
+    }
+
+    const queryLower = query.toLowerCase().trim();
+
+    // Enhanced matching: check title and description
+    const matches = (item) => {
+      const titleLower = item.title.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+
+      // Check if title or description includes the query
+      return titleLower.includes(queryLower) || descLower.includes(queryLower);
+    };
+
+    // Score items for better sorting (title matches rank higher)
+    const scoreItem = (item) => {
+      const titleLower = item.title.toLowerCase();
+      const descLower = (item.description || '').toLowerCase();
+
+      // Exact title match = highest score
+      if (titleLower === queryLower) return 1000;
+
+      // Title starts with query = high score
+      if (titleLower.startsWith(queryLower)) return 100;
+
+      // Title contains query = medium score
+      if (titleLower.includes(queryLower)) return 50;
+
+      // Description contains query = low score
+      if (descLower.includes(queryLower)) return 10;
+
+      return 0;
+    };
+
     const available = (_item) => true; // Always show; execution is guarded.
 
-    return commandItems
-      .map((group) => ({
-        ...group,
-        commands: group.commands.filter((item) => matches(item.title) && available(item)),
-      }))
+    // Get plugin slash commands
+    const pluginCommandGroups = editorAPI.getSlashCommands();
+
+    // Combine core commands with plugin commands
+    const allCommandGroups = [...commandItems, ...pluginCommandGroups];
+
+    // Filter and sort commands by relevance
+    const filtered = allCommandGroups
+      .map((group) => {
+        const matchedCommands = group.commands
+          .filter((item) => matches(item) && available(item))
+          .map((item) => ({ ...item, _score: scoreItem(item) }))
+          .sort((a, b) => b._score - a._score); // Sort by score descending
+
+        return {
+          ...group,
+          commands: matchedCommands
+        };
+      })
       .filter((group) => group.commands.length > 0);
+
+    return filtered;
   },
 
   render: () => {
@@ -385,12 +1088,21 @@ const slashCommand = {
       onStart: (props) => {
         // keep latest rect for sub‑popovers (e.g., table size picker)
         if (props.clientRect) lastClientRect = props.clientRect;
+
+        // Refresh plugin commands on each open in case they changed
+        const currentItems = slashCommand.items(props);
+        const enhancedProps = {
+          ...props,
+          items: currentItems
+        };
+
         component = new ReactRenderer(SlashCommandList, {
-          props,
+          props: enhancedProps,
           editor: props.editor,
         });
 
         if (!props.clientRect) {
+          logger.warn('SlashCommand', 'No clientRect in onStart');
           return;
         }
 
@@ -406,22 +1118,37 @@ const slashCommand = {
       },
 
       onUpdate(props) {
-        component.updateProps(props);
+        // Refresh items with latest plugin commands
+        const currentItems = slashCommand.items(props);
+        const enhancedProps = {
+          ...props,
+          items: currentItems
+        };
+
+        component.updateProps(enhancedProps);
 
         if (!props.clientRect) {
+          logger.warn('SlashCommand', 'No clientRect in onUpdate');
+          return;
+        }
+
+        if (!popup) {
+          logger.warn('SlashCommand', 'No popup in onUpdate');
           return;
         }
 
         // update rect for sub‑popovers
         lastClientRect = props.clientRect;
-        popup[0].setProps({
-          getReferenceClientRect: props.clientRect,
-        });
+        if (popup && popup[0]) {
+          popup[0].setProps({
+            getReferenceClientRect: props.clientRect,
+          });
+        }
       },
 
       onKeyDown(props) {
         if (props.event.key === "Escape") {
-          popup[0].hide();
+          if (popup && popup[0]) popup[0].hide();
           return true;
         }
 
@@ -429,11 +1156,12 @@ const slashCommand = {
       },
 
       onExit() {
-        popup[0].destroy();
-        component.destroy();
+        if (popup && popup[0]) popup[0].destroy();
+        if (component) component.destroy();
       },
     };
   },
 };
 
+// Export enhanced slash command with plugin support
 export default slashCommand;
